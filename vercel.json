@@ -1,0 +1,19 @@
+{
+  "version": 2,
+  "functions": {
+    "api/trade.js": {
+      "maxDuration": 30
+    },
+    "api/backtest.js": {
+      "maxDuration": 60
+    }
+  },
+  "env": {
+    "LOG_LEVEL": "info"
+  },
+  "build": {
+    "env": {
+      "NODE_ENV": "production"
+    }
+  }
+}

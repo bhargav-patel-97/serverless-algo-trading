@@ -1,7 +1,24 @@
 {
+  "name": "serverless-algo-trading",
+  "version": "1.0.0",
+  "description": "Serverless Algorithmic Trading System",
+  "main": "index.js",
   "type": "module",
   "scripts": {
     "dev": "vercel dev",
-    "deploy": "vercel --prod"
+    "deploy": "vercel --prod",
+    "test": "node test/test.js"
+  },
+  "dependencies": {
+    "@alpacahq/alpaca-trade-api": "^3.0.0",
+    "@googleapis/sheets": "^6.0.0",
+    "google-auth-library": "^9.0.0",
+    "node-fetch": "^3.3.0"
+  },
+  "devDependencies": {
+    "@vercel/node": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=18"
   }
 }
