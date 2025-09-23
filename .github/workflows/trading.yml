@@ -1,0 +1,14 @@
+name: Execute Trading Strategy
+on:
+  schedule:
+    # Run every 15 minutes during market hours (9:30 AM - 4:00 PM EST, Mon-Fri)
+    - cron: '15,0 13-20 * * 1-5'  # UTC times
+    - cron: '0 21 * * 1-5'        # Market close
+
+jobs:
+  trade:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute Trading
+        run: |
+          curl -X POST ${{ secrets.TRADING_ENDPOINT }}/api/trade
