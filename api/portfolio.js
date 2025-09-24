@@ -1,14 +1,14 @@
 // api/portfolio.js - Portfolio Management Endpoint
-import { AlpacaApi } from '../lib/brokers/alpacaHybrid.js';
+import { AlpacaHybridApi } from '../lib/brokers/alpacaHybrid.js';
 import { Logger } from '../lib/utils/logger.js';
 import { RiskManager } from '../lib/utils/riskManager.js';
 
 export default async function handler(req, res) {
     const logger = new Logger();
-
+    
     try {
         // Initialize Alpaca API
-        const alpaca = new AlpacaApi({
+        const alpaca = new AlpacaHybridApi({
             keyId: process.env.ALPACA_API_KEY,
             secretKey: process.env.ALPACA_SECRET_KEY,
             paper: process.env.ALPACA_PAPER === 'true',
@@ -25,28 +25,28 @@ export default async function handler(req, res) {
 
         // Get account information
         const account = await alpaca.getAccount();
-
+        
         // Get current positions
         const positions = await alpaca.getPositions();
-
+        
         // Get recent orders
         const recentOrders = await alpaca.getOrders('all');
         const last10Orders = recentOrders.slice(0, 10);
-
+        
         // Calculate performance metrics
         const performanceMetrics = await riskManager.calculatePerformanceMetrics(account, positions);
-
+        
         // Calculate portfolio allocation
         const totalValue = parseFloat(account.portfolio_value);
         const cashValue = parseFloat(account.cash);
         const investedValue = totalValue - cashValue;
-
+        
         // Calculate position details
         const positionDetails = await Promise.all(positions.map(async (position) => {
             try {
                 const quote = await alpaca.getQuote(position.symbol);
                 const currentPrice = (quote.bid + quote.ask) / 2;
-
+                
                 return {
                     symbol: position.symbol,
                     quantity: parseFloat(position.qty),
@@ -77,7 +77,7 @@ export default async function handler(req, res) {
                 };
             }
         }));
-
+        
         // Calculate risk metrics
         const riskMetrics = {
             portfolioValue: totalValue,
@@ -91,7 +91,7 @@ export default async function handler(req, res) {
             totalUnrealizedPL: positionDetails.reduce((sum, p) => sum + p.unrealizedPL, 0),
             totalDayChange: positionDetails.reduce((sum, p) => sum + p.dayChange, 0)
         };
-
+        
         // Format recent orders
         const formattedOrders = last10Orders.map(order => ({
             id: order.id,
@@ -106,13 +106,13 @@ export default async function handler(req, res) {
             filledQuantity: parseFloat(order.filled_qty || 0),
             filledPrice: parseFloat(order.filled_avg_price || 0)
         }));
-
+        
         logger.info('Portfolio data retrieved successfully', {
             positionsCount: positions.length,
             totalValue: totalValue,
             unrealizedPL: riskMetrics.totalUnrealizedPL
         });
-
+        
         return res.json({
             status: 'success',
             timestamp: new Date().toISOString(),
@@ -140,13 +140,13 @@ export default async function handler(req, res) {
                 }))
             }
         });
-
+        
     } catch (error) {
         logger.error('Portfolio API error', { 
             error: error.message, 
             stack: error.stack 
         });
-
+        
         return res.status(500).json({
             status: 'error',
             message: error.message,
