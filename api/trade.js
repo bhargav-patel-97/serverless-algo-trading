@@ -1,5 +1,5 @@
 // api/trade.js - Main Trading Execution Endpoint
-import { AlpacaApi } from '../lib/brokers/alpaca.js';
+import { AlpacaApi } from '../lib/brokers/alpacaHybrid.js';
 import { MomentumStrategy } from '../lib/strategies/momentum.js';
 import { MeanReversionStrategy } from '../lib/strategies/meanReversion.js';
 import { RegimeDetectionStrategy } from '../lib/strategies/regimeDetection.js';

@@ -1,5 +1,5 @@
 // api/portfolio.js - Portfolio Management Endpoint
-import { AlpacaApi } from '../lib/brokers/alpaca.js';
+import { AlpacaApi } from '../lib/brokers/alpacaHybrid.js';
 import { Logger } from '../lib/utils/logger.js';
 import { RiskManager } from '../lib/utils/riskManager.js';
 

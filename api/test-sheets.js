@@ -1,6 +1,6 @@
 // api/test-sheets.js - Google Sheets Connection Test
 import { GoogleSheetsLogger } from '../lib/utils/googleSheets.js';
-import { AlpacaApi } from '../lib/brokers/alpaca.js';
+import { AlpacaApi } from '../lib/brokers/alpacaHybrid.js';
 
 export default async function handler(req, res) {
     const results = {
