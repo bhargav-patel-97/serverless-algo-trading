@@ -1,6 +1,6 @@
 // api/test-sheets.js - Google Sheets Connection Test
 import { GoogleSheetsLogger } from '../lib/utils/googleSheets.js';
-import { AlpacaApi } from '../lib/brokers/alpacaHybrid.js';
+import { AlpacaHybridApi } from '../lib/brokers/alpacaHybrid.js';
 
 export default async function handler(req, res) {
     const results = {
@@ -9,7 +9,7 @@ export default async function handler(req, res) {
         environment: {},
         status: 'success'
     };
-
+    
     try {
         // Test environment variables
         results.environment = {
@@ -32,10 +32,10 @@ export default async function handler(req, res) {
                 regimeDetectionEnabled: process.env.REGIME_DETECTION_ENABLED === 'true'
             }
         };
-
+        
         // Test Alpaca Connection
         try {
-            const alpaca = new AlpacaApi({
+            const alpaca = new AlpacaHybridApi({
                 keyId: process.env.ALPACA_API_KEY,
                 secretKey: process.env.ALPACA_SECRET_KEY,
                 paper: process.env.ALPACA_PAPER === 'true',
@@ -43,10 +43,10 @@ export default async function handler(req, res) {
                     'https://paper-api.alpaca.markets' : 
                     'https://api.alpaca.markets'
             });
-
+            
             const account = await alpaca.getAccount();
             const isMarketOpen = await alpaca.isMarketOpen();
-
+            
             results.tests.alpaca = {
                 success: true,
                 account: {
@@ -66,19 +66,19 @@ export default async function handler(req, res) {
             };
             results.status = 'partial_failure';
         }
-
+        
         // Test Google Sheets Connection
         try {
             const sheetsLogger = new GoogleSheetsLogger();
             const sheetsTest = await sheetsLogger.testConnection();
-
+            
             results.tests.googleSheets = {
                 success: sheetsTest.success,
                 enabled: sheetsLogger.enabled,
                 title: sheetsTest.title || null,
                 error: sheetsTest.error || null
             };
-
+            
             if (!sheetsTest.success) {
                 results.status = 'partial_failure';
             }
@@ -90,10 +90,10 @@ export default async function handler(req, res) {
             };
             results.status = 'partial_failure';
         }
-
+        
         // Test Historical Data (the main issue from logs)
         try {
-            const alpaca = new AlpacaApi({
+            const alpaca = new AlpacaHybridApi({
                 keyId: process.env.ALPACA_API_KEY,
                 secretKey: process.env.ALPACA_SECRET_KEY,
                 paper: process.env.ALPACA_PAPER === 'true',
@@ -101,9 +101,9 @@ export default async function handler(req, res) {
                     'https://paper-api.alpaca.markets' : 
                     'https://api.alpaca.markets'
             });
-
+            
             const spyData = await alpaca.getHistoricalData('SPY', '1Day', 10);
-
+            
             results.tests.historicalData = {
                 success: true,
                 symbol: 'SPY',
@@ -121,16 +121,16 @@ export default async function handler(req, res) {
             };
             results.status = 'partial_failure';
         }
-
+        
         // Overall status
         if (results.status === 'success') {
             results.message = 'All systems operational!';
         } else {
             results.message = 'Some systems have issues - check individual test results';
         }
-
+        
         return res.json(results);
-
+        
     } catch (error) {
         return res.status(500).json({
             status: 'error',
