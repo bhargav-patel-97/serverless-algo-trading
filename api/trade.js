@@ -1,5 +1,5 @@
 // api/trade.js - Main Trading Execution Endpoint
-import { AlpacaApi } from '../lib/brokers/alpacaHybrid.js';
+import { AlpacaHybridApi } from '../lib/brokers/alpacaHybrid.js';
 import { MomentumStrategy } from '../lib/strategies/momentum.js';
 import { MeanReversionStrategy } from '../lib/strategies/meanReversion.js';
 import { RegimeDetectionStrategy } from '../lib/strategies/regimeDetection.js';
@@ -10,12 +10,12 @@ import { GoogleSheetsLogger } from '../lib/utils/googleSheets.js';
 export default async function handler(req, res) {
     const logger = new Logger();
     const sheetsLogger = new GoogleSheetsLogger();
-
+    
     try {
         logger.info('Trading system initiated', { timestamp: new Date().toISOString() });
-
+        
         // Initialize Alpaca API
-        const alpaca = new AlpacaApi({
+        const alpaca = new AlpacaHybridApi({
             keyId: process.env.ALPACA_API_KEY,
             secretKey: process.env.ALPACA_SECRET_KEY,
             paper: process.env.ALPACA_PAPER === 'true',
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
                 'https://paper-api.alpaca.markets' : 
                 'https://api.alpaca.markets'
         });
-
+        
         // Initialize strategies
         const strategies = [
             new MomentumStrategy({
@@ -50,7 +50,7 @@ export default async function handler(req, res) {
                 positionSize: 0.03 // 3% of portfolio
             })
         ];
-
+        
         // Initialize risk manager
         const riskManager = new RiskManager({
             maxPositionSize: 0.05, // 5% max per position
@@ -59,19 +59,19 @@ export default async function handler(req, res) {
             stopLossPercent: 0.03, // 3% stop loss
             takeProfitPercent: 0.06 // 6% take profit (2:1 ratio)
         });
-
+        
         // Get current account info
         const account = await alpaca.getAccount();
         const currentEquity = parseFloat(account.equity);
-
+        
         logger.info('Account info retrieved', { 
             equity: currentEquity,
             buyingPower: account.buying_power 
         });
-
+        
         // Get current positions
         const positions = await alpaca.getPositions();
-
+        
         // Check daily loss limit
         if (await riskManager.isDailyLossLimitExceeded(account, positions)) {
             logger.warning('Daily loss limit exceeded, skipping trades');
@@ -81,21 +81,20 @@ export default async function handler(req, res) {
                 timestamp: new Date().toISOString()
             });
         }
-
+        
         const tradingSignals = [];
-
+        
         // Execute each enabled strategy
         for (const strategy of strategies) {
             if (strategy.isEnabled()) {
                 try {
                     logger.info(`Executing strategy: ${strategy.getName()}`);
-
                     const signals = await strategy.generateSignals(alpaca);
-
+                    
                     for (const signal of signals) {
                         // Apply risk management
                         const adjustedSignal = await riskManager.adjustSignal(signal, account, positions);
-
+                        
                         if (adjustedSignal && adjustedSignal.quantity > 0) {
                             // Execute trade
                             const order = await alpaca.submitOrder({
@@ -105,7 +104,7 @@ export default async function handler(req, res) {
                                 type: 'market',
                                 time_in_force: 'day'
                             });
-
+                            
                             const tradeResult = {
                                 orderId: order.id,
                                 symbol: adjustedSignal.symbol,
@@ -117,12 +116,12 @@ export default async function handler(req, res) {
                                 stopLoss: adjustedSignal.stopLoss,
                                 takeProfit: adjustedSignal.takeProfit
                             };
-
+                            
                             tradingSignals.push(tradeResult);
-
+                            
                             // Log to Google Sheets
                             await sheetsLogger.logTrade(tradeResult);
-
+                            
                             logger.success('Trade executed successfully', tradeResult);
                         }
                     }
@@ -133,11 +132,11 @@ export default async function handler(req, res) {
                 }
             }
         }
-
+        
         // Log system performance
         const performanceMetrics = await riskManager.calculatePerformanceMetrics(account, positions);
         await sheetsLogger.logPerformance(performanceMetrics);
-
+        
         return res.json({
             status: 'success',
             tradesExecuted: tradingSignals.length,
@@ -145,13 +144,13 @@ export default async function handler(req, res) {
             performanceMetrics,
             timestamp: new Date().toISOString()
         });
-
+        
     } catch (error) {
         logger.error('Trading system error', { 
             error: error.message, 
             stack: error.stack 
         });
-
+        
         return res.status(500).json({
             status: 'error',
             message: error.message,
