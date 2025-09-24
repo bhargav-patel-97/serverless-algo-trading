@@ -4,49 +4,60 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Algorithmic Trading Dashboard</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
     <div class="dashboard">
         <!-- Header -->
-        <header class="dashboard-header">
+        <div class="dashboard-header">
             <div class="header-content">
-                <h1>Trading Dashboard</h1>
+                <h1>Algorithmic Trading Dashboard</h1>
                 <div class="system-status">
-                    <div class="status-indicator" id="apiStatus">
-                        <span class="status-dot"></span>
-                        <span class="status-text">API Connected</span>
+                    <div class="status-indicator">
+                        <div class="status-dot"></div>
+                        <span class="status-text">Connecting...</span>
                     </div>
                     <div class="last-update">
-                        Last Update: <span id="lastUpdate">2025-09-23 09:47:12</span>
+                        Last Update: <span id="lastUpdate">Never</span>
                     </div>
-                    <button class="btn btn--error emergency-stop" id="emergencyStop">
-                        Emergency Stop
+                    <button id="refreshData" class="btn btn--sm btn--secondary" title="Refresh Data">
+                        🔄 Refresh
+                    </button>
+                    <button id="emergencyStop" class="btn btn--sm emergency-stop">
+                        🛑 Emergency Stop
                     </button>
                 </div>
             </div>
-        </header>
+        </div>
 
-        <!-- Main Content -->
         <div class="dashboard-content">
             <!-- Sidebar Navigation -->
-            <nav class="sidebar">
+            <div class="sidebar">
                 <ul class="nav-menu">
-                    <li><a href="#" class="nav-link active" data-tab="dashboard">Dashboard</a></li>
-                    <li><a href="#" class="nav-link" data-tab="strategies">Strategies</a></li>
-                    <li><a href="#" class="nav-link" data-tab="risk">Risk Management</a></li>
-                    <li><a href="#" class="nav-link" data-tab="positions">Positions</a></li>
-                    <li><a href="#" class="nav-link" data-tab="logs">Logs</a></li>
-                    <li><a href="#" class="nav-link" data-tab="backtest">Backtest</a></li>
-                    <li><a href="#" class="nav-link" data-tab="manual">Manual Trading</a></li>
+                    <li><a href="#" class="nav-link active" data-tab="dashboard">📊 Dashboard</a></li>
+                    <li><a href="#" class="nav-link" data-tab="strategies">⚙️ Strategies</a></li>
+                    <li><a href="#" class="nav-link" data-tab="positions">📈 Positions</a></li>
+                    <li><a href="#" class="nav-link" data-tab="risk">🛡️ Risk</a></li>
+                    <li><a href="#" class="nav-link" data-tab="logs">📋 Logs</a></li>
+                    <li><a href="#" class="nav-link" data-tab="backtest">🔍 Backtest</a></li>
+                    <li><a href="#" class="nav-link" data-tab="manual">🎯 Manual</a></li>
                 </ul>
-            </nav>
+            </div>
 
-            <!-- Tab Content -->
-            <main class="main-content">
+            <!-- Main Content -->
+            <div class="main-content">
+                <!-- Loading indicator -->
+                <div class="loading-indicator" style="display: none;">
+                    <div class="card">
+                        <div class="card__body">
+                            <p>🔄 Loading live data...</p>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Dashboard Tab -->
-                <section id="dashboard" class="tab-content active">
+                <div id="dashboard" class="tab-content active">
                     <div class="metrics-grid">
                         <!-- Portfolio Overview -->
                         <div class="card">
@@ -55,19 +66,19 @@
                                 <div class="metric-row">
                                     <div class="metric">
                                         <label>Total Value</label>
-                                        <span class="value" id="totalValue">$101,200</span>
+                                        <div class="value" id="totalValue">$0</div>
                                     </div>
                                     <div class="metric">
                                         <label>Cash</label>
-                                        <span class="value" id="cashValue">$98,500</span>
+                                        <div class="value" id="cashValue">$0</div>
                                     </div>
                                     <div class="metric">
                                         <label>Daily P&L</label>
-                                        <span class="value positive" id="dailyPnl">+$285</span>
+                                        <div class="value" id="dailyPnl">$0</div>
                                     </div>
                                     <div class="metric">
                                         <label>Total P&L</label>
-                                        <span class="value positive" id="totalPnl">+$1,200</span>
+                                        <div class="value" id="totalPnl">$0</div>
                                     </div>
                                 </div>
                             </div>
@@ -80,26 +91,26 @@
                                 <div class="metric-row">
                                     <div class="metric">
                                         <label>Total Return</label>
-                                        <span class="value positive" id="totalReturn">1.2%</span>
+                                        <div class="value" id="totalReturn">0%</div>
                                     </div>
                                     <div class="metric">
                                         <label>Sharpe Ratio</label>
-                                        <span class="value" id="sharpeRatio">1.85</span>
+                                        <div class="value" id="sharpeRatio">0</div>
                                     </div>
                                     <div class="metric">
                                         <label>Max Drawdown</label>
-                                        <span class="value negative" id="maxDrawdown">-2.1%</span>
+                                        <div class="value" id="maxDrawdown">0%</div>
                                     </div>
                                     <div class="metric">
                                         <label>Win Rate</label>
-                                        <span class="value" id="winRate">67%</span>
+                                        <div class="value" id="winRate">0%</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Current Positions -->
-                        <div class="card positions-card">
+                        <div class="card">
                             <div class="card__body">
                                 <h3>Current Positions</h3>
                                 <div class="positions-table">
@@ -115,25 +126,25 @@
                                             </tr>
                                         </thead>
                                         <tbody id="positionsTableBody">
-                                            <!-- Will be populated by JavaScript -->
+                                            <!-- Live positions will be populated here -->
                                         </tbody>
                                     </table>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- Performance Chart -->
+                        <!-- Portfolio Performance Chart -->
                         <div class="card chart-card">
                             <div class="card__body">
                                 <h3>Portfolio Performance</h3>
-                                <div class="chart-container" style="position: relative; height: 300px;">
+                                <div style="position: relative; height: 300px;">
                                     <canvas id="performanceChart"></canvas>
                                 </div>
                             </div>
                         </div>
 
                         <!-- Recent Trades -->
-                        <div class="card trades-card">
+                        <div class="card chart-card">
                             <div class="card__body">
                                 <h3>Recent Trades</h3>
                                 <div class="trades-table">
@@ -150,279 +161,375 @@
                                             </tr>
                                         </thead>
                                         <tbody id="tradesTableBody">
-                                            <!-- Will be populated by JavaScript -->
+                                            <!-- Live trades will be populated here -->
                                         </tbody>
                                     </table>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </section>
+                </div>
 
                 <!-- Strategies Tab -->
-                <section id="strategies" class="tab-content">
+                <div id="strategies" class="tab-content">
                     <div class="strategies-grid">
                         <div class="card">
                             <div class="card__body">
                                 <h3>Strategy Configuration</h3>
+                                
                                 <div class="strategy-tabs">
                                     <button class="strategy-tab active" data-strategy="momentum">Momentum</button>
-                                    <button class="strategy-tab" data-strategy="meanreversion">Mean Reversion</button>
+                                    <button class="strategy-tab" data-strategy="meanReversion">Mean Reversion</button>
                                     <button class="strategy-tab" data-strategy="regime">Regime Detection</button>
                                 </div>
-                                
+
+                                <!-- Momentum Strategy -->
                                 <div id="momentumStrategy" class="strategy-config active">
                                     <div class="strategy-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="momentumEnabled" checked>
+                                        <div class="toggle-switch">
+                                            <input type="checkbox" id="momentumEnabled">
                                             <span class="toggle-slider"></span>
-                                        </label>
-                                        <span>Enable Momentum Strategy</span>
+                                        </div>
+                                        <div>
+                                            <h4>Momentum Strategy</h4>
+                                            <p>Moving average crossover with trend following</p>
+                                        </div>
                                     </div>
+                                    
                                     <div class="form-group">
                                         <label class="form-label">Short MA Period</label>
-                                        <input type="number" class="form-control" id="maShort" value="20">
+                                        <input type="number" id="maShort" class="form-control" value="20">
                                     </div>
+                                    
                                     <div class="form-group">
                                         <label class="form-label">Long MA Period</label>
-                                        <input type="number" class="form-control" id="maLong" value="50">
+                                        <input type="number" id="maLong" class="form-control" value="50">
                                     </div>
+                                    
                                     <div class="form-group">
                                         <label class="form-label">Position Size (%)</label>
-                                        <input type="number" class="form-control" id="momentumPositionSize" value="2" step="0.1">
+                                        <input type="number" id="momentumPositionSize" class="form-control" value="2" step="0.1">
                                     </div>
                                 </div>
 
-                                <div id="meanreversionStrategy" class="strategy-config">
+                                <!-- Mean Reversion Strategy -->
+                                <div id="meanReversionStrategy" class="strategy-config">
                                     <div class="strategy-header">
-                                        <label class="toggle-switch">
+                                        <div class="toggle-switch">
                                             <input type="checkbox" id="meanReversionEnabled">
                                             <span class="toggle-slider"></span>
-                                        </label>
-                                        <span>Enable Mean Reversion Strategy</span>
+                                        </div>
+                                        <div>
+                                            <h4>Mean Reversion Strategy</h4>
+                                            <p>RSI-based oversold/overbought trading</p>
+                                        </div>
                                     </div>
+                                    
                                     <div class="form-group">
                                         <label class="form-label">RSI Period</label>
-                                        <input type="number" class="form-control" id="rsiPeriod" value="14">
+                                        <input type="number" id="rsiPeriod" class="form-control" value="14">
                                     </div>
+                                    
                                     <div class="form-group">
                                         <label class="form-label">Oversold Threshold</label>
-                                        <input type="number" class="form-control" id="oversoldThreshold" value="30">
+                                        <input type="number" id="oversoldThreshold" class="form-control" value="30">
                                     </div>
+                                    
                                     <div class="form-group">
                                         <label class="form-label">Overbought Threshold</label>
-                                        <input type="number" class="form-control" id="overboughtThreshold" value="70">
+                                        <input type="number" id="overboughtThreshold" class="form-control" value="70">
                                     </div>
                                 </div>
 
+                                <!-- Regime Detection Strategy -->
                                 <div id="regimeStrategy" class="strategy-config">
                                     <div class="strategy-header">
-                                        <label class="toggle-switch">
-                                            <input type="checkbox" id="regimeEnabled" checked>
+                                        <div class="toggle-switch">
+                                            <input type="checkbox" id="regimeEnabled">
                                             <span class="toggle-slider"></span>
-                                        </label>
-                                        <span>Enable Regime Detection Strategy</span>
+                                        </div>
+                                        <div>
+                                            <h4>Regime Detection Strategy</h4>
+                                            <p>Bull/bear market detection using SPY 200-day MA</p>
+                                        </div>
                                     </div>
+                                    
                                     <div class="form-group">
                                         <label class="form-label">Lookback Period</label>
-                                        <input type="number" class="form-control" id="lookbackPeriod" value="200">
+                                        <input type="number" id="lookbackPeriod" class="form-control" value="200">
                                     </div>
+                                    
                                     <div class="form-group">
                                         <label class="form-label">Bull Market ETF</label>
-                                        <select class="form-control" id="bullEtf">
-                                            <option value="TQQQ" selected>TQQQ</option>
+                                        <select id="bullEtf" class="form-control">
+                                            <option value="TQQQ">TQQQ</option>
                                             <option value="UPRO">UPRO</option>
                                             <option value="TECL">TECL</option>
                                         </select>
                                     </div>
+                                    
                                     <div class="form-group">
                                         <label class="form-label">Bear Market ETF</label>
-                                        <select class="form-control" id="bearEtf">
-                                            <option value="SQQQ" selected>SQQQ</option>
+                                        <select id="bearEtf" class="form-control">
+                                            <option value="SQQQ">SQQQ</option>
                                             <option value="SPXU">SPXU</option>
                                             <option value="TECS">TECS</option>
                                         </select>
                                     </div>
                                 </div>
-
-                                <button class="btn btn--primary" id="saveStrategies">Save Configuration</button>
+                                
+                                <button id="saveStrategies" class="btn btn--primary">Save Configuration</button>
                             </div>
                         </div>
 
+                        <!-- ETF Universe -->
                         <div class="card">
                             <div class="card__body">
                                 <h3>ETF Universe</h3>
-                                <div class="etf-grid" id="etfGrid">
-                                    <!-- Will be populated by JavaScript -->
+                                <div id="etfGrid" class="etf-grid">
+                                    <!-- ETF symbols will be populated here -->
                                 </div>
                             </div>
                         </div>
                     </div>
-                </section>
+                </div>
 
-                <!-- Risk Management Tab -->
-                <section id="risk" class="tab-content">
+                <!-- Positions Tab -->
+                <div id="positions" class="tab-content">
                     <div class="risk-grid">
+                        <!-- Position Management -->
+                        <div class="card">
+                            <div class="card__body">
+                                <h3>Position Management</h3>
+                                <div id="positionsDetailed" class="positions-detailed">
+                                    <!-- Detailed positions will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Position Controls -->
+                        <div class="card">
+                            <div class="card__body">
+                                <h3>Position Controls</h3>
+                                <div id="positionControls" class="position-controls">
+                                    <!-- Position controls will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Risk Tab -->
+                <div id="risk" class="tab-content">
+                    <div class="risk-grid">
+                        <!-- Risk Parameters -->
                         <div class="card">
                             <div class="card__body">
                                 <h3>Risk Parameters</h3>
                                 <div class="form-group">
                                     <label class="form-label">Max Daily Loss (%)</label>
-                                    <input type="number" class="form-control" id="maxDailyLoss" value="5" step="0.1">
+                                    <input type="number" id="maxDailyLoss" class="form-control" value="5" step="0.1">
                                 </div>
+                                
                                 <div class="form-group">
                                     <label class="form-label">Max Position Size (%)</label>
-                                    <input type="number" class="form-control" id="maxPositionSize" value="10" step="0.1">
+                                    <input type="number" id="maxPositionSize" class="form-control" value="10" step="0.1">
                                 </div>
+                                
                                 <div class="form-group">
                                     <label class="form-label">Stop Loss (%)</label>
-                                    <input type="number" class="form-control" id="stopLoss" value="3" step="0.1">
+                                    <input type="number" id="stopLoss" class="form-control" value="3" step="0.1">
                                 </div>
+                                
                                 <div class="form-group">
                                     <label class="form-label">Take Profit (%)</label>
-                                    <input type="number" class="form-control" id="takeProfit" value="6" step="0.1">
+                                    <input type="number" id="takeProfit" class="form-control" value="6" step="0.1">
                                 </div>
-                                <button class="btn btn--primary" id="saveRisk">Update Risk Settings</button>
+                                
+                                <button id="saveRisk" class="btn btn--primary">Update Settings</button>
                             </div>
                         </div>
 
+                        <!-- Risk Metrics -->
                         <div class="card">
                             <div class="card__body">
                                 <h3>Risk Metrics</h3>
                                 <div class="metric-row">
                                     <div class="metric">
                                         <label>Current Exposure</label>
-                                        <span class="value" id="currentExposure">2.7%</span>
+                                        <div class="value" id="currentExposure">0%</div>
                                     </div>
                                     <div class="metric">
                                         <label>Daily Loss Limit</label>
-                                        <span class="value" id="dailyLossLimit">$5,060</span>
+                                        <div class="value" id="dailyLossLimit">$0</div>
                                     </div>
                                     <div class="metric">
                                         <label>Available Buying Power</label>
-                                        <span class="value" id="buyingPower">$98,500</span>
+                                        <div class="value" id="availableBuyingPower">$0</div>
                                     </div>
                                     <div class="metric">
                                         <label>Risk Score</label>
-                                        <span class="value status--success">Low</span>
+                                        <div class="value" id="riskScore">Low</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </section>
-
-                <!-- Positions Tab -->
-                <section id="positions" class="tab-content">
-                    <div class="card">
-                        <div class="card__body">
-                            <h3>Position Management</h3>
-                            <div class="positions-detailed" id="positionsDetailed">
-                                <!-- Will be populated by JavaScript -->
-                            </div>
-                        </div>
-                    </div>
-                </section>
+                </div>
 
                 <!-- Logs Tab -->
-                <section id="logs" class="tab-content">
+                <div id="logs" class="tab-content">
                     <div class="card">
                         <div class="card__body">
                             <h3>System Logs</h3>
+                            
                             <div class="log-controls">
-                                <select class="form-control" id="logLevel" style="width: auto; display: inline-block;">
+                                <select id="logLevel" class="form-control" style="width: auto;">
                                     <option value="all">All Levels</option>
                                     <option value="INFO">Info</option>
                                     <option value="WARNING">Warning</option>
                                     <option value="ERROR">Error</option>
                                     <option value="SUCCESS">Success</option>
                                 </select>
-                                <button class="btn btn--secondary" id="clearLogs">Clear Logs</button>
+                                
+                                <button id="clearLogs" class="btn btn--sm btn--secondary">Clear Logs</button>
+                                
+                                <div class="log-status">
+                                    <span>Auto-refresh: <strong>ON</strong></span>
+                                </div>
                             </div>
-                            <div class="log-viewer" id="logViewer">
-                                <!-- Will be populated by JavaScript -->
+                            
+                            <div id="logViewer" class="log-viewer">
+                                <div class="log-entry">
+                                    <div class="log-timestamp">--:--</div>
+                                    <div class="log-level INFO">INFO</div>
+                                    <div class="log-message">Waiting for live data...</div>
+                                    <div class="log-strategy">System</div>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </section>
+                </div>
 
                 <!-- Backtest Tab -->
-                <section id="backtest" class="tab-content">
+                <div id="backtest" class="tab-content">
                     <div class="card">
                         <div class="card__body">
                             <h3>Backtesting</h3>
+                            
                             <div class="backtest-controls">
                                 <div class="form-group">
                                     <label class="form-label">Start Date</label>
-                                    <input type="date" class="form-control" id="backtestStart" value="2024-01-01">
+                                    <input type="date" id="backtestStart" class="form-control" value="2024-01-01">
                                 </div>
+                                
                                 <div class="form-group">
                                     <label class="form-label">End Date</label>
-                                    <input type="date" class="form-control" id="backtestEnd" value="2025-09-23">
+                                    <input type="date" id="backtestEnd" class="form-control" value="2025-09-23">
                                 </div>
+                                
                                 <div class="form-group">
                                     <label class="form-label">Initial Capital</label>
-                                    <input type="number" class="form-control" id="initialCapital" value="100000">
+                                    <input type="number" id="initialCapital" class="form-control" value="100000">
                                 </div>
-                                <button class="btn btn--primary" id="runBacktest">Run Backtest</button>
+                                
+                                <div class="form-group">
+                                    <button id="runBacktest" class="btn btn--primary">Run Backtest</button>
+                                </div>
                             </div>
-                            <div class="backtest-results" id="backtestResults">
-                                <div class="chart-container" style="position: relative; height: 400px;">
+                            
+                            <div class="backtest-results">
+                                <div style="position: relative; height: 400px;">
                                     <canvas id="backtestChart"></canvas>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </section>
+                </div>
 
                 <!-- Manual Trading Tab -->
-                <section id="manual" class="tab-content">
+                <div id="manual" class="tab-content">
                     <div class="manual-trading-grid">
                         <div class="card">
                             <div class="card__body">
                                 <h3>Manual Trading</h3>
+                                
                                 <div class="form-group">
                                     <label class="form-label">Symbol</label>
-                                    <select class="form-control" id="manualSymbol">
-                                        <option value="TQQQ">TQQQ</option>
-                                        <option value="SQQQ">SQQQ</option>
-                                        <option value="UPRO">UPRO</option>
-                                        <option value="SPXU">SPXU</option>
+                                    <select id="manualSymbol" class="form-control">
+                                        <option value="TQQQ">TQQQ - 3x Nasdaq Bull</option>
+                                        <option value="SQQQ">SQQQ - 3x Nasdaq Bear</option>
+                                        <option value="UPRO">UPRO - 3x S&P Bull</option>
+                                        <option value="SPXU">SPXU - 3x S&P Bear</option>
+                                        <option value="TECL">TECL - 3x Tech Bull</option>
+                                        <option value="TECS">TECS - 3x Tech Bear</option>
                                     </select>
                                 </div>
+                                
                                 <div class="form-group">
                                     <label class="form-label">Quantity</label>
-                                    <input type="number" class="form-control" id="manualQuantity" value="10">
+                                    <input type="number" id="manualQuantity" class="form-control" value="10" min="1">
                                 </div>
+                                
                                 <div class="form-group">
                                     <label class="form-label">Order Type</label>
-                                    <select class="form-control" id="orderType">
-                                        <option value="market">Market</option>
-                                        <option value="limit">Limit</option>
+                                    <select id="orderType" class="form-control">
+                                        <option value="market">Market Order</option>
+                                        <option value="limit">Limit Order</option>
                                     </select>
                                 </div>
+                                
                                 <div class="form-group" id="limitPriceGroup" style="display: none;">
-                                    <label class="form-label">Limit Price</label>
-                                    <input type="number" class="form-control" id="limitPrice" step="0.01">
+                                    <label class="form-label">Limit Price ($)</label>
+                                    <input type="number" id="limitPrice" class="form-control" step="0.01" placeholder="0.00">
                                 </div>
+                                
                                 <div class="manual-buttons">
-                                    <button class="btn btn--success" id="manualBuy">Buy</button>
-                                    <button class="btn btn--error" id="manualSell">Sell</button>
+                                    <button id="manualBuy" class="btn btn--success btn--lg">
+                                        📈 Buy
+                                    </button>
+                                    <button id="manualSell" class="btn btn--error btn--lg">
+                                        📉 Sell
+                                    </button>
+                                </div>
+                                
+                                <div class="manual-warning">
+                                    <p><strong>⚠️ Risk Warning:</strong> Manual trades are subject to all risk management rules. Ensure market is open before placing orders.</p>
                                 </div>
                             </div>
                         </div>
 
                         <div class="card">
                             <div class="card__body">
-                                <h3>Position Controls</h3>
-                                <div class="position-controls" id="positionControls">
-                                    <!-- Will be populated by JavaScript -->
+                                <h3>Quick Actions</h3>
+                                <div class="quick-actions">
+                                    <button class="btn btn--outline btn--full-width mb-8" onclick="alert('Feature coming soon!')">
+                                        🔄 Rebalance Portfolio
+                                    </button>
+                                    <button class="btn btn--outline btn--full-width mb-8" onclick="alert('Feature coming soon!')">
+                                        📊 Close All Positions
+                                    </button>
+                                    <button class="btn btn--warning btn--full-width" onclick="alert('Feature coming soon!')">
+                                        ❌ Cancel All Orders
+                                    </button>
+                                </div>
+                                
+                                <div class="market-status">
+                                    <h4>Market Status</h4>
+                                    <div class="status-row">
+                                        <span class="status-label">NYSE/NASDAQ:</span>
+                                        <span id="marketStatus" class="status-value">Loading...</span>
+                                    </div>
+                                    <div class="status-row">
+                                        <span class="status-label">Next Open:</span>
+                                        <span id="nextMarketOpen" class="status-value">--</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                     </div>
-                </section>
-            </main>
+                </div>
+            </div>
         </div>
     </div>
 
