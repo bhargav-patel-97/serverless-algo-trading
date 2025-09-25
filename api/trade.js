@@ -156,7 +156,9 @@ export default async function handler(req, res) {
           const signals = await strategy.generateSignals(alpaca);
 
           // Categorize signals by base symbol for better tracking
-          const baseSymbol = strategy.config?.baseSymbol || 'SPY';
+          const baseSymbol = (strategy.config && strategy.config.baseSymbol) || 
+                   (strategy.options && strategy.options.baseSymbol) || 
+                   'SPY';
           signalsByBaseSymbol[baseSymbol] = signalsByBaseSymbol[baseSymbol] || [];
 
           for (const signal of signals) {
@@ -297,7 +299,17 @@ export default async function handler(req, res) {
       },
       positionSummary: positionSummary,
       performanceMetrics: performanceMetrics,
-      cooldownStatus: positionManager.getCooldownStatus(),
+      cooldownStatus: {
+        allCooldowns: positionManager.getAllCooldowns(),
+        symbolSpecific: Array.from(currentPositions.keys()).reduce((status, symbol) => {
+          try {
+            status[symbol] = positionManager.getCooldownStatus(symbol);
+          } catch (error) {
+            status[symbol] = { error: error.message, isInCooldown: false };
+          }
+          return status;
+        }, {})
+      },
       timestamp: new Date().toISOString()
     };
 
