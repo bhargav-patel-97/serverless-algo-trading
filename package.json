@@ -20,13 +20,5 @@
   },
   "engines": {
     "node": ">=18"
-  },
-  "keywords": [
-    "algorithmic-trading",
-    "position-management",
-    "alpaca",
-    "serverless",
-    "vercel",
-    "trading-bot"
-  ]
+  }
 }

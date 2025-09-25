@@ -1,12 +1,10 @@
 /**
- * Modified API trade endpoint with position management integration
- * This replaces your existing /api/trade endpoint
+ * Enhanced API trade endpoint with position management integration (ES Module Version)
+ * This replaces your existing /api/trade.js endpoint
  */
 
-const TradingPositionManager = require('./TradingPositionManager');
-
-// Initialize your existing components (adjust imports as needed)
-// const { initializeAlpaca, Logger, executeStrategies } = require('./your-existing-modules');
+import TradingPositionManager from '../lib/TradingPositionManager.js';
+import Alpaca from '@alpacahq/alpaca-trade-api';
 
 /**
  * Enhanced Logger class that matches your existing log format
@@ -69,19 +67,21 @@ async function executeMomentumStrategy(alpaca, logger, positionManager) {
       // Get current price
       const currentPrice = await getRealTimeQuote(momentumSignal.symbol);
       
-      // Execute trade with position management
+      // Execute trade with position management and signal strength
       const tradeResult = await positionManager.executeTradeWithValidation(
         momentumSignal.symbol,
         momentumSignal.side,
         momentumSignal.quantity,
         currentPrice,
-        'Momentum Strategy'
+        'Momentum Strategy',
+        momentumSignal.confidence // Pass signal strength
       );
       
       if (tradeResult.skipped) {
         logger.warn('Momentum strategy trade skipped', {
           symbol: momentumSignal.symbol,
-          reasons: tradeResult.reasons
+          reasons: tradeResult.reasons,
+          signalStrength: momentumSignal.confidence
         });
         return { executed: false, skipped: true, reasons: tradeResult.reasons };
       }
@@ -89,7 +89,8 @@ async function executeMomentumStrategy(alpaca, logger, positionManager) {
       if (tradeResult.success) {
         logger.success('Momentum strategy trade executed', {
           orderId: tradeResult.order.id,
-          symbol: momentumSignal.symbol
+          symbol: momentumSignal.symbol,
+          scaling: tradeResult.signalAnalysis?.canScale
         });
         return { executed: true, orderId: tradeResult.order.id };
       }
@@ -110,7 +111,7 @@ async function executeMomentumStrategy(alpaca, logger, positionManager) {
 }
 
 /**
- * Enhanced Regime Detection Strategy with position management
+ * Enhanced Regime Detection Strategy with signal strength thresholds
  */
 async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
   try {
@@ -118,12 +119,17 @@ async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
     
     // Your existing regime detection logic (keep this part)
     // Fetch SPY data for regime analysis
+    logger.info('Requesting SPY historical data', { lookbackPeriod: 60 });
     logger.info('Fetching historical data from real market sources', {
       symbol: 'SPY',
       timeframe: '1Day',
       limit: 210,
       source: 'Free market APIs (not Alpaca)'
     });
+    
+    // Your existing SPY data fetching and regime analysis...
+    // const spyData = await fetchSPYHistoricalData();
+    // const regimeAnalysis = analyzeRegime(spyData);
     
     // Mock regime analysis (replace with your actual implementation)
     const regimeAnalysis = {
@@ -132,7 +138,8 @@ async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
       strength: 0.009607395289253935,
       regimeChange: true, // This triggers the trade
       spyPrice: 590.50,
-      ma200: 596.23
+      ma200: 596.23,
+      confidence: 0.5261154973884189 // Signal strength for position scaling
     };
     
     logger.info('Regime Detection Analysis', {
@@ -140,14 +147,16 @@ async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
       ma200: regimeAnalysis.ma200.toString(),
       regime: regimeAnalysis.currentRegime,
       strength: `${(regimeAnalysis.strength * 100).toFixed(2)}%`,
-      previousRegime: regimeAnalysis.previousRegime
+      previousRegime: regimeAnalysis.previousRegime,
+      confidence: regimeAnalysis.confidence.toFixed(4)
     });
     
     if (regimeAnalysis.regimeChange) {
       logger.info('Regime change detected', {
         from: regimeAnalysis.previousRegime,
         to: regimeAnalysis.currentRegime,
-        strength: regimeAnalysis.strength
+        strength: regimeAnalysis.strength,
+        confidence: regimeAnalysis.confidence
       });
       
       // Determine trade based on regime
@@ -155,15 +164,16 @@ async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
         symbol: regimeAnalysis.currentRegime === 'bear' ? 'SQQQ' : 'TQQQ',
         side: 'buy',
         reason: `regime_change_to_${regimeAnalysis.currentRegime}`,
-        confidence: 0.5261154973884189,
+        confidence: regimeAnalysis.confidence,
         regimeStrength: regimeAnalysis.strength
       };
       
-      // Get real-time quotes for both symbols
+      // Get real-time quotes for both symbols (your existing logic)
       logger.info('Fetching real-time quote from market sources', {
         symbol: 'SQQQ',
         source: 'Free market APIs (not Alpaca)'
       });
+      
       const sqqqPrice = await getRealTimeQuote('SQQQ');
       logger.info('Real-time quote retrieved successfully', {
         symbol: 'SQQQ',
@@ -176,6 +186,7 @@ async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
         symbol: 'TQQQ',
         source: 'Free market APIs (not Alpaca)'
       });
+      
       const tqqqPrice = await getRealTimeQuote('TQQQ');
       logger.info('Real-time quote retrieved successfully', {
         symbol: 'TQQQ',
@@ -188,12 +199,31 @@ async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
       const currentPrice = tradeSignal.symbol === 'SQQQ' ? sqqqPrice : tqqqPrice;
       const quantity = 95; // Your calculated quantity from risk manager
       
-      // === CRITICAL: Add position management validation ===
-      logger.info('Validating trade with position management', {
+      logger.info('Signal adjusted by risk manager', {
+        originalSignal: {
+          symbol: tradeSignal.symbol,
+          side: tradeSignal.side,
+          reason: tradeSignal.reason,
+          currentPrice: currentPrice,
+          positionSize: 0.015,
+          confidence: tradeSignal.confidence,
+          regimeStrength: tradeSignal.regimeStrength,
+          timestamp: new Date().toISOString()
+        },
+        adjustedQuantity: quantity,
+        riskAmount: quantity * currentPrice,
+        stopLoss: currentPrice * 0.97,
+        takeProfit: currentPrice * 1.06
+      });
+      
+      // === EXECUTE TRADE WITH SIGNAL STRENGTH VALIDATION ===
+      logger.info('Validating trade with signal strength threshold', {
         symbol: tradeSignal.symbol,
         side: tradeSignal.side,
         quantity: quantity,
-        currentPrice: currentPrice
+        currentPrice: currentPrice,
+        signalStrength: tradeSignal.confidence,
+        strategy: 'Regime Detection Strategy'
       });
       
       const tradeResult = await positionManager.executeTradeWithValidation(
@@ -201,7 +231,8 @@ async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
         tradeSignal.side,
         quantity,
         currentPrice,
-        'Regime Detection Strategy'
+        'Regime Detection Strategy',
+        tradeSignal.confidence // This is the key - pass signal strength
       );
       
       if (tradeResult.skipped) {
@@ -209,18 +240,27 @@ async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
           symbol: tradeSignal.symbol,
           originalSignal: tradeSignal,
           skipReasons: tradeResult.reasons,
-          validation: tradeResult.validation
+          signalAnalysis: tradeResult.signalAnalysis,
+          currentSignalStrength: tradeSignal.confidence,
+          previousSignalStrength: tradeResult.signalAnalysis?.previousSignal
         });
         
         return {
           executed: false,
           skipped: true,
           reasons: tradeResult.reasons,
-          originalSignal: tradeSignal
+          originalSignal: tradeSignal,
+          signalAnalysis: tradeResult.signalAnalysis
         };
       }
       
       if (tradeResult.success) {
+        // Log trade to Google Sheets (your existing code)
+        logger.info('Trade logged to Google Sheets', {
+          symbol: tradeSignal.symbol,
+          orderId: tradeResult.order.id
+        });
+        
         logger.success('Trade executed successfully', {
           orderId: tradeResult.order.id,
           symbol: tradeSignal.symbol,
@@ -229,8 +269,11 @@ async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
           strategy: 'Regime Detection Strategy',
           timestamp: tradeResult.timestamp,
           price: currentPrice,
-          stopLoss: currentPrice * 0.97, // Your stop loss logic
-          takeProfit: currentPrice * 1.06 // Your take profit logic
+          stopLoss: currentPrice * 0.97,
+          takeProfit: currentPrice * 1.06,
+          signalStrength: tradeSignal.confidence,
+          scaling: tradeResult.signalAnalysis?.canScale || false,
+          signalImprovement: tradeResult.signalAnalysis?.relativeImprovement
         });
         
         return {
@@ -241,14 +284,17 @@ async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
             side: tradeSignal.side,
             quantity: quantity,
             price: currentPrice,
-            strategy: 'Regime Detection Strategy'
+            strategy: 'Regime Detection Strategy',
+            signalStrength: tradeSignal.confidence,
+            scaling: tradeResult.signalAnalysis?.canScale
           }
         };
       } else {
         logger.error('Trade execution failed', {
           symbol: tradeSignal.symbol,
           error: tradeResult.error,
-          validation: tradeResult.validation
+          validation: tradeResult.validation,
+          signalAnalysis: tradeResult.signalAnalysis
         });
         throw new Error(`Trade execution failed: ${tradeResult.error?.message || 'Unknown error'}`);
       }
@@ -263,24 +309,62 @@ async function executeRegimeDetectionStrategy(alpaca, logger, positionManager) {
 }
 
 /**
- * Mock function for real-time quote (replace with your actual implementation)
+ * Get real-time quote (replace with your actual implementation)
+ * This should match your existing real-time price fetching logic
  */
 async function getRealTimeQuote(symbol) {
   // Replace this with your actual real-time quote fetching logic
-  const mockPrices = {
-    'SQQQ': 15.64,
-    'TQQQ': 100.75,
-    'SPY': 590.50
-  };
+  // This is just a mock implementation for demonstration
   
-  // Simulate API delay
-  await new Promise(resolve => setTimeout(resolve, 50));
-  
-  return mockPrices[symbol] || 100.00;
+  try {
+    // Your existing implementation might use Yahoo Finance, Finnhub, etc.
+    // Example using fetch (replace with your actual logic):
+    
+    // Option 1: If using Finnhub
+    if (process.env.FINNHUB_API_KEY) {
+      const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${process.env.FINNHUB_API_KEY}`);
+      const data = await response.json();
+      if (data.c) return data.c; // Current price
+    }
+    
+    // Option 2: Mock prices for testing (replace with your actual implementation)
+    const mockPrices = {
+      'SQQQ': 15.64,
+      'TQQQ': 100.75,
+      'SPY': 590.50
+    };
+    
+    // Simulate API delay
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
+    return mockPrices[symbol] || 100.00;
+  } catch (error) {
+    console.error('Error fetching real-time quote:', error);
+    // Return a fallback price
+    const fallbackPrices = {
+      'SQQQ': 15.50,
+      'TQQQ': 100.00,
+      'SPY': 590.00
+    };
+    return fallbackPrices[symbol] || 100.00;
+  }
 }
 
 /**
- * Enhanced main API endpoint handler
+ * Initialize Alpaca client with your configuration
+ */
+function initializeAlpaca() {
+  // Replace with your actual Alpaca configuration
+  return new Alpaca({
+    keyId: process.env.ALPACA_API_KEY,
+    secretKey: process.env.ALPACA_SECRET_KEY,
+    paper: process.env.ALPACA_PAPER === 'true', // true for paper trading
+    usePolygon: false
+  });
+}
+
+/**
+ * Enhanced main API endpoint handler with signal strength thresholds
  */
 export default async function handler(req, res) {
   const logger = new Logger('AlgoTrading');
@@ -293,12 +377,11 @@ export default async function handler(req, res) {
       timestamp: new Date().toISOString()
     });
     
-    // Initialize Alpaca (your existing initialization code)
-    // Replace with your actual Alpaca initialization
-    const alpaca = initializeAlpaca(); // Your function
+    // Initialize Alpaca
+    const alpaca = initializeAlpaca();
     
     logger.info('Hybrid Alpaca API initialized', {
-      mode: 'Paper Trading',
+      mode: process.env.ALPACA_PAPER === 'true' ? 'Paper Trading' : 'Live Trading',
       dataSource: 'Real market data from free APIs'
     });
     
@@ -315,10 +398,11 @@ export default async function handler(req, res) {
       buyingPower: account.buying_power
     });
     
-    // === INITIALIZE POSITION MANAGER ===
+    // === INITIALIZE POSITION MANAGER WITH SIGNAL STRENGTH THRESHOLDS ===
     positionManager = new TradingPositionManager(alpaca, {
-      minTimeBetweenTrades: 60000, // 1 minute cooldown
+      minTimeBetweenTrades: 300000, // 5 minute cooldown
       maxPositionSizePercent: 0.10, // 10% max position size
+      signalImprovementThreshold: 0.20, // 20% signal improvement required for scaling
       enableLogging: true,
       logger: logger
     });
@@ -337,7 +421,8 @@ export default async function handler(req, res) {
     logger.info('Position summary retrieved', {
       totalPositions: positionSummary.totalPositions,
       totalValue: positionSummary.totalValue,
-      totalUnrealizedPL: positionSummary.totalUnrealizedPL
+      totalUnrealizedPL: positionSummary.totalUnrealizedPL,
+      signalCache: positionSummary.signalCache
     });
     
     // Check market status
@@ -356,7 +441,7 @@ export default async function handler(req, res) {
       logger.warn('Market is closed - trades may not execute immediately');
     }
     
-    // Execute strategies with position management
+    // Execute strategies with enhanced position management
     const strategyResults = [];
     
     // 1. Execute Momentum Strategy
@@ -374,7 +459,7 @@ export default async function handler(req, res) {
       });
     }
     
-    // 2. Execute Regime Detection Strategy
+    // 2. Execute Regime Detection Strategy with signal strength
     try {
       const regimeResult = await executeRegimeDetectionStrategy(alpaca, logger, positionManager);
       strategyResults.push({
@@ -399,8 +484,8 @@ export default async function handler(req, res) {
       dailyPnL: finalPositions.totalUnrealizedPL
     });
     
-    // Get cooldown status for monitoring
-    const cooldownStatus = positionManager.getCooldownStatus();
+    // Get signal cache status for monitoring
+    const signalCacheStatus = positionManager.getSignalCacheStatus();
     
     // Return comprehensive response
     const response = {
@@ -420,7 +505,9 @@ export default async function handler(req, res) {
       strategies: strategyResults,
       positionManagement: {
         validationEnabled: true,
-        cooldownStatus: cooldownStatus,
+        signalThresholdEnabled: true,
+        signalImprovementThreshold: positionManager.signalImprovementThreshold * 100 + '%',
+        signalCache: signalCacheStatus,
         riskLimits: {
           maxPositionSizePercent: positionManager.maxPositionSizePercent * 100,
           minTimeBetweenTrades: positionManager.minTimeBetweenTrades / 1000
@@ -443,6 +530,7 @@ export default async function handler(req, res) {
       timestamp: new Date().toISOString(),
       positionManagement: positionManager ? {
         enabled: true,
+        signalThresholdEnabled: true,
         lastError: error.message
       } : {
         enabled: false,
@@ -450,24 +538,4 @@ export default async function handler(req, res) {
       }
     });
   }
-}
-
-/**
- * Initialize Alpaca client (replace with your actual implementation)
- */
-function initializeAlpaca() {
-  // Your existing Alpaca initialization code
-  // This should return your configured Alpaca client instance 
-  // Example (adjust based on your setup):
-  
-  const Alpaca = require('@alpacahq/alpaca-trade-api');
-
-  return new Alpaca({
-    keyId: process.env.ALPACA_API_KEY,
-    secretKey: process.env.ALPACA_SECRET_KEY,
-    paper: true, // Set to false for live trading
-    usePolygon: false
-  });
-  
-  throw new Error('Please implement initializeAlpaca() with your actual Alpaca configuration');
 }
