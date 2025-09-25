@@ -27,9 +27,12 @@ export default async function handler(req, res) {
                     'NOT SET'
             },
             strategies: {
-                momentumEnabled: process.env.MOMENTUM_ENABLED === 'true',
-                meanReversionEnabled: process.env.MEAN_REVERSION_ENABLED === 'true',
-                regimeDetectionEnabled: process.env.REGIME_DETECTION_ENABLED === 'true'
+                qqqMomentumEnabled: process.env.QQQ_MOMENTUM_ENABLED === 'true',
+                spyMomentumEnabled: process.env.SPY_MOMENTUM_ENABLED === 'true',
+                qqqRegimeDetectionEnabled: process.env.QQQ_REGIME_DETECTION_ENABLED === 'true',
+                spyRegimeDetectionEnabled: process.env.SPY_REGIME_DETECTION_ENABLED === 'true',
+                qqqMeanReversionEnabled: process.env.QQQ_MEAN_REVERSION_ENABLED === 'true',
+                spyMeanReversionEnabled: process.env.SPY_MEAN_REVERSION_ENABLED === 'true'
             }
         };
         
