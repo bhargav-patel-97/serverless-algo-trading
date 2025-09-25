@@ -14,7 +14,7 @@ import { PositionExitManager } from '../lib/PositionExitManager.js'; // NEW
 export default async function handler(req, res) {
   const logger = new Logger();
   const sheetsLogger = new GoogleSheetsLogger();
-  
+
   try {
     logger.info('Enhanced Trading System with TP/SL Position Monitoring initiated', {
       timestamp: new Date().toISOString()
@@ -132,18 +132,19 @@ export default async function handler(req, res) {
     // Get current account info
     const account = await alpaca.getAccount();
     const currentEquity = parseFloat(account.equity);
+
     logger.info('Account info retrieved', {
       equity: currentEquity,
       buyingPower: account.buying_power
     });
 
-    // =====================================
+    // ======================================
     // NEW: POSITION EXIT MONITORING PHASE
-    // =====================================
+    // ======================================
     logger.info('Phase 1: Monitoring existing positions for TP/SL exits');
-    
+
     const exitResults = await exitManager.monitorAndExecuteExits();
-    
+
     if (exitResults.exitOrdersExecuted > 0) {
       logger.info('Position exits executed', {
         exitOrdersExecuted: exitResults.exitOrdersExecuted,
@@ -163,15 +164,15 @@ export default async function handler(req, res) {
       }
     }
 
-    // ===================================
+    // =======================================
     // EXISTING: NEW TRADE SIGNALS PHASE
-    // ===================================
+    // =======================================
     logger.info('Phase 2: Processing new trade signals');
 
     // Get current positions with position manager
     const currentPositions = await positionManager.getCurrentPositions();
     const positions = await alpaca.getPositions();
-    
+
     logger.info('Position status after exits', {
       totalPositions: currentPositions.size,
       symbols: Array.from(currentPositions.keys())
@@ -180,7 +181,7 @@ export default async function handler(req, res) {
     // Check daily loss limit
     if (await riskManager.isDailyLossLimitExceeded(account, positions)) {
       logger.warning('Daily loss limit exceeded, skipping new trades');
-      
+
       return res.json({
         status: 'success',
         phase1_exits: exitResults,
@@ -206,12 +207,13 @@ export default async function handler(req, res) {
           const baseSymbol = (strategy.config && strategy.config.baseSymbol) ||
             (strategy.options && strategy.options.baseSymbol) ||
             'SPY';
+
           signalsByBaseSymbol[baseSymbol] = signalsByBaseSymbol[baseSymbol] || [];
 
           for (const signal of signals) {
             // Apply risk management (includes TP/SL calculation)
             const adjustedSignal = await riskManager.adjustSignal(signal, account, positions);
-            
+
             if (adjustedSignal && adjustedSignal.quantity > 0) {
               const quantity = Math.floor(adjustedSignal.quantity);
               const currentPrice = adjustedSignal.currentPrice;
@@ -244,12 +246,13 @@ export default async function handler(req, res) {
                   timestamp: new Date().toISOString(),
                   baseSymbol: baseSymbol
                 };
+
                 tradingResults.push(skippedTrade);
                 await sheetsLogger.logTrade(skippedTrade);
                 continue;
               }
 
-              // NEW: Execute trade with TP/SL storage capability
+              // FIXED: Execute trade with TP/SL storage capability using correct method name
               const tradeResult = await executeTradeWithTPSLStorage(
                 positionManager,
                 adjustedSignal,
@@ -288,7 +291,7 @@ export default async function handler(req, res) {
                 });
 
                 logger.success('Trade executed successfully with TP/SL storage', enhancedTradeResult);
-                
+
               } else {
                 // Handle failed or skipped trades
                 const failedTrade = {
@@ -301,11 +304,12 @@ export default async function handler(req, res) {
                   timestamp: new Date().toISOString(),
                   baseSymbol: baseSymbol
                 };
+
                 tradingResults.push(failedTrade);
                 await sheetsLogger.logTrade(failedTrade);
                 logger.warning('Trade execution failed or skipped', failedTrade);
               }
-              
+
             } else {
               logger.info('Signal filtered out by risk management', {
                 originalSignal: signal,
@@ -322,9 +326,9 @@ export default async function handler(req, res) {
       }
     }
 
-    // Get comprehensive position summary
-    const positionSummary = await positionManager.getPositionSummary();
-    
+    // FIXED: Get comprehensive position summary using correct method name
+    const positionSummary = await positionManager.getEnhancedPositionSummary();
+
     // NEW: Get exit monitoring status
     const exitMonitoringStatus = await exitManager.getMonitoringStatus();
 
@@ -343,7 +347,7 @@ export default async function handler(req, res) {
     // Enhanced response with both exit and entry trade data
     const response = {
       status: 'success',
-      
+
       // Phase 1: Exit monitoring results
       exitMonitoring: {
         positionsMonitored: exitResults.positionsMonitored,
@@ -353,7 +357,7 @@ export default async function handler(req, res) {
         exitTrades: exitResults.exitTrades,
         errors: exitResults.errors
       },
-      
+
       // Phase 2: New trade execution results
       newTrades: {
         tradesExecuted: tradingResults.filter(t => t.status === 'executed').length,
@@ -365,24 +369,24 @@ export default async function handler(req, res) {
           QQQ_signals: signalsByBaseSymbol.QQQ.length
         }
       },
-      
+
       // Enhanced position and monitoring status
       positionSummary: positionSummary,
       exitMonitoringStatus: exitMonitoringStatus,
       performanceMetrics: performanceMetrics,
-      
+
       cooldownStatus: {
-        allCooldowns: positionManager.getAllCooldowns(),
+        allCooldowns: positionManager.getAllCooldowns ? positionManager.getAllCooldowns() : {},
         symbolSpecific: Array.from(currentPositions.keys()).reduce((status, symbol) => {
           try {
-            status[symbol] = positionManager.getCooldownStatus(symbol);
+            status[symbol] = positionManager.getCooldownStatus ? positionManager.getCooldownStatus(symbol) : { isInCooldown: false };
           } catch (error) {
             status[symbol] = { error: error.message, isInCooldown: false };
           }
           return status;
         }, {})
       },
-      
+
       timestamp: new Date().toISOString()
     };
 
@@ -403,7 +407,7 @@ export default async function handler(req, res) {
       error: error.message,
       stack: error.stack
     });
-    
+
     return res.status(500).json({
       status: 'error',
       message: error.message,
@@ -413,7 +417,7 @@ export default async function handler(req, res) {
 }
 
 /**
- * Helper function to execute trade with TP/SL storage
+ * FIXED: Helper function to execute trade with TP/SL storage using correct method name
  * @param {Object} positionManager - Trading position manager
  * @param {Object} adjustedSignal - Risk-adjusted signal
  * @param {number} quantity - Trade quantity
@@ -423,27 +427,25 @@ export default async function handler(req, res) {
  */
 async function executeTradeWithTPSLStorage(positionManager, adjustedSignal, quantity, currentPrice, strategy) {
   try {
-    // Execute the trade
-    const tradeResult = await positionManager.executeTradeWithValidation(
+    // Prepare exit levels for storage
+    const exitLevels = {
+      stopLoss: adjustedSignal.stopLoss || null,
+      takeProfit: adjustedSignal.takeProfit || null
+    };
+
+    // FIXED: Call the correct method name from TradingPositionManager
+    const tradeResult = await positionManager.executeTradeWithTPSL(
       adjustedSignal.symbol,
       adjustedSignal.side,
       quantity,
       currentPrice,
-      strategy
+      strategy,
+      adjustedSignal.confidence || null, // signal strength
+      exitLevels // TP/SL levels to store
     );
 
-    if (tradeResult.success) {
-      // Store TP/SL levels if the trade was successful
-      // Note: The adjustedSignal should contain stopLoss and takeProfit from RiskManager
-      if (adjustedSignal.stopLoss || adjustedSignal.takeProfit) {
-        // We would need to enhance the positionManager to store these levels
-        // For now, we'll just indicate that levels should be stored
-        tradeResult.exitLevelsStored = true;
-      }
-    }
-
     return tradeResult;
-    
+
   } catch (error) {
     return {
       success: false,
