@@ -259,7 +259,6 @@ export default async function handler(req, res) {
                   baseSymbol: baseSymbol
                 };
                 tradingResults.push(duplicateTrade);
-                await sheetsLogger.logTrade(duplicateTrade);
                 continue;
               }
               // Log signal strength for this trade
@@ -303,7 +302,6 @@ export default async function handler(req, res) {
                 };
 
                 tradingResults.push(skippedTrade);
-                await sheetsLogger.logTrade(skippedTrade);
                 continue;
               }
 
