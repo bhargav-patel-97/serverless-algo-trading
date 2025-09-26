@@ -20,6 +20,9 @@ export default async function handler(req, res) {
       timestamp: new Date().toISOString()
     });
 
+    // Initialize SignalStrength sheet if needed
+    await sheetsLogger.initializeSignalStrengthSheet();
+
     // Initialize Alpaca API
     const alpaca = new AlpacaHybridApi({
       keyId: process.env.ALPACA_API_KEY,
@@ -218,6 +221,58 @@ export default async function handler(req, res) {
               const quantity = Math.floor(adjustedSignal.quantity);
               const currentPrice = adjustedSignal.currentPrice;
 
+              // --- ENHANCEMENT: Prevent duplicate trades and manage signal strength ---
+              // Check for open position in the same symbol
+              const openPosition = currentPositions.get(adjustedSignal.symbol);
+              let allowTrade = true;
+              if (openPosition) {
+                // Get last signal strength for this symbol/side from Google Sheets
+                const lastStrength = await sheetsLogger.getLastSignalStrength(adjustedSignal.symbol, adjustedSignal.side);
+                const newStrength = adjustedSignal.confidence != null ? adjustedSignal.confidence : (adjustedSignal.signalStrength != null ? adjustedSignal.signalStrength : null);
+                if (lastStrength != null && newStrength != null) {
+                  // Only allow if new signal is at least 30% stronger than last
+                  if (newStrength <= lastStrength * 1.3) {
+                    allowTrade = false;
+                    logger.info('Duplicate/open position detected: new signal not strong enough to re-enter', {
+                      symbol: adjustedSignal.symbol,
+                      lastStrength,
+                      newStrength
+                    });
+                  }
+                } else if (lastStrength != null && newStrength == null) {
+                  allowTrade = false;
+                  logger.info('Duplicate/open position detected: no new signal strength provided', {
+                    symbol: adjustedSignal.symbol,
+                    lastStrength
+                  });
+                }
+              }
+              if (!allowTrade) {
+                const duplicateTrade = {
+                  symbol: adjustedSignal.symbol,
+                  side: adjustedSignal.side,
+                  quantity: quantity,
+                  strategy: strategy.getName(),
+                  status: 'skipped',
+                  reasons: ['duplicate_or_weak_signal'],
+                  timestamp: new Date().toISOString(),
+                  baseSymbol: baseSymbol
+                };
+                tradingResults.push(duplicateTrade);
+                await sheetsLogger.logTrade(duplicateTrade);
+                continue;
+              }
+              // Log signal strength for this trade
+              await sheetsLogger.logSignalStrength({
+                timestamp: new Date().toISOString(),
+                symbol: adjustedSignal.symbol,
+                side: adjustedSignal.side,
+                strategy: strategy.getName(),
+                signalStrength: adjustedSignal.confidence != null ? adjustedSignal.confidence : (adjustedSignal.signalStrength != null ? adjustedSignal.signalStrength : null),
+                orderId: null // Will be updated after trade if needed
+              });
+              // --- END ENHANCEMENT ---
+
               // Enhanced validation with position manager
               const validation = await positionManager.validateTradeBeforeExecution(
                 adjustedSignal.symbol,
@@ -288,6 +343,16 @@ export default async function handler(req, res) {
                 await sheetsLogger.logTrade({
                   ...enhancedTradeResult,
                   type: 'entry' // NEW: Distinguish between entry and exit trades
+                });
+
+                // After successful trade, update signal strength log with orderId
+                await sheetsLogger.logSignalStrength({
+                  timestamp: enhancedTradeResult.timestamp,
+                  symbol: enhancedTradeResult.symbol,
+                  side: enhancedTradeResult.side,
+                  strategy: enhancedTradeResult.strategy,
+                  signalStrength: adjustedSignal.confidence != null ? adjustedSignal.confidence : (adjustedSignal.signalStrength != null ? adjustedSignal.signalStrength : null),
+                  orderId: tradeResult.order.id
                 });
 
                 logger.success('Trade executed successfully with TP/SL storage', enhancedTradeResult);
