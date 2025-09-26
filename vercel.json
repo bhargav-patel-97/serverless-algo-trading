@@ -48,6 +48,32 @@
       ]
     }
   ],
+  "env": {
+    "LOG_LEVEL": "@log_level",
+    "LOG_BUFFER_SIZE": "@log_buffer_size",
+    "LOG_BUFFER_TIMEOUT": "@log_buffer_timeout",
+    "ALPACA_API_KEY": "@alpaca_api_key",
+    "ALPACA_SECRET_KEY": "@alpaca_secret_key",
+    "ALPACA_PAPER": "@alpaca_paper",
+    "GOOGLE_CLIENT_EMAIL": "@google_client_email",
+    "GOOGLE_PRIVATE_KEY": "@google_private_key",
+    "GOOGLE_SPREADSHEET_ID": "@google_spreadsheet_id",
+    "SPY_MOMENTUM_ENABLED": "@spy_momentum_enabled",
+    "QQQ_MOMENTUM_ENABLED": "@qqq_momentum_enabled",
+    "SPY_REGIME_DETECTION_ENABLED": "@spy_regime_detection_enabled",
+    "QQQ_REGIME_DETECTION_ENABLED": "@qqq_regime_detection_enabled",
+    "SPY_MEAN_REVERSION_ENABLED": "@spy_mean_reversion_enabled",
+    "QQQ_MEAN_REVERSION_ENABLED": "@qqq_mean_reversion_enabled",
+    "MAX_POSITION_SIZE": "@max_position_size",
+    "MAX_DAILY_LOSS": "@max_daily_loss",
+    "STOP_LOSS_PERCENT": "@stop_loss_percent",
+    "TAKE_PROFIT_PERCENT": "@take_profit_percent",
+    "MIN_TIME_BETWEEN_TRADES": "@min_time_between_trades",
+    "MAX_POSITION_SIZE_PERCENT": "@max_position_size_percent",
+    "EXIT_PRICE_BUFFER": "@exit_price_buffer",
+    "EXIT_ORDER_MAX_RETRIES": "@exit_order_max_retries",
+    "EMERGENCY_STOP_ENABLED": "@emergency_stop_enabled"
+  },
   "build": {
     "env": {
       "NODE_ENV": "production"
