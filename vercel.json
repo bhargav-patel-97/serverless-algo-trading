@@ -23,18 +23,29 @@
       "memory": 256
     }
   },
-  "routes": [
+  "rewrites": [
     {
-      "src": "/dashboard",
-      "dest": "/dashboard.html"
-    },
+      "source": "/dashboard",
+      "destination": "/dashboard.html"
+    }
+  ],
+  "headers": [
     {
-      "src": "/api/(.*)",
-      "dest": "/api/$1"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        },
+        {
+          "key": "Access-Control-Allow-Methods",
+          "value": "GET, POST, PUT, DELETE, OPTIONS"
+        },
+        {
+          "key": "Access-Control-Allow-Headers",
+          "value": "Content-Type, Authorization"
+        }
+      ]
     }
   ],
   "env": {
@@ -67,30 +78,5 @@
     "env": {
       "NODE_ENV": "production"
     }
-  },
-  "headers": [
-    {
-      "source": "/api/(.*)",
-      "headers": [
-        {
-          "key": "Access-Control-Allow-Origin",
-          "value": "*"
-        },
-        {
-          "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
-        },
-        {
-          "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
-        }
-      ]
-    }
-  ],
-  "rewrites": [
-    {
-      "source": "/dashboard",
-      "destination": "/dashboard.html"
-    }
-  ]
+  }
 }
