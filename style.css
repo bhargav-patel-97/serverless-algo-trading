@@ -1164,7 +1164,7 @@ input:checked + .toggle-slider:before {
 }
 
 .log-message {
-    color: var(--color-text);
+    color: white;
     flex: 1;
 }
 
