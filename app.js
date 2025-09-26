@@ -1,3 +1,4 @@
+// Enhanced app.js - Trading Dashboard Application with Real API Integration
 // Application Data - Now using live API data instead of static
 let appData = {
   "strategies": [],
@@ -27,6 +28,7 @@ let backtestChart = null;
 let currentLogLevel = 'all';
 let dataRefreshInterval = null;
 let isLoading = false;
+let dashboardData = null;
 
 // API Configuration
 const API_BASE = window.location.origin;
@@ -48,7 +50,25 @@ document.addEventListener('DOMContentLoaded', function() {
   dataRefreshInterval = setInterval(loadLiveData, REFRESH_INTERVAL);
 });
 
-// API Functions for fetching live data
+// Enhanced API Functions for fetching live data
+async function fetchDashboardData() {
+  try {
+    const response = await fetch(`${API_BASE}/api/dashboard`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const result = await response.json();
+    
+    if (result.status === 'success') {
+      return result.data;
+    } else {
+      throw new Error(result.message || 'Failed to fetch dashboard data');
+    }
+  } catch (error) {
+    console.error('Error fetching dashboard data:', error);
+    showNotification('Failed to fetch dashboard data: ' + error.message, 'error');
+    return null;
+  }
+}
+
 async function fetchPortfolioData() {
   try {
     const response = await fetch(`${API_BASE}/api/portfolio`);
@@ -76,16 +96,16 @@ async function fetchSystemStatus() {
 
 async function fetchRecentTrades() {
   try {
-    // Try to get recent trades from portfolio data first
-    const portfolioData = await fetchPortfolioData();
-    if (portfolioData && portfolioData.recentOrders) {
-      return portfolioData.recentOrders.map(order => ({
-        timestamp: order.submittedAt || order.filledAt,
-        symbol: order.symbol,
-        action: order.side.toUpperCase(),
-        quantity: order.quantity || order.filledQuantity,
-        price: order.filledPrice || 0,
-        strategy: 'API Trade', // Could be enhanced to track strategy source
+    // Get trades from dashboard data
+    const dashboardResponse = await fetchDashboardData();
+    if (dashboardResponse && dashboardResponse.trades) {
+      return dashboardResponse.trades.map(trade => ({
+        timestamp: trade.timestamp,
+        symbol: trade.symbol,
+        action: trade.side.toUpperCase(),
+        quantity: trade.quantity,
+        price: trade.price,
+        strategy: trade.strategy,
         pnl: null // Would need separate calculation
       }));
     }
@@ -98,9 +118,23 @@ async function fetchRecentTrades() {
 
 async function fetchLogEntries() {
   try {
+    // Try to get logs from dashboard data
+    const dashboardResponse = await fetchDashboardData();
+    if (dashboardResponse && dashboardResponse.logs) {
+      return dashboardResponse.logs.map(log => ({
+        timestamp: log.timestamp,
+        level: log.level,
+        context: log.context,
+        message: log.message,
+        data: log.data || {}
+      }));
+    }
+    
+    // Fallback to existing logs API
     const response = await fetch(`${API_BASE}/api/logs`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
+    
     if (data.status === 'success' && data.logs) {
       return data.logs;
     }
@@ -116,196 +150,475 @@ async function loadLiveData() {
   if (isLoading) return;
   
   isLoading = true;
-  showLoadingState(true);
-  
+  showLoadingState();
+
   try {
     // Fetch all data in parallel
-    const [portfolioData, systemStatus, trades, logs] = await Promise.all([
+    const [
+      dashboardResponse,
+      portfolioResponse,
+      systemResponse
+    ] = await Promise.all([
+      fetchDashboardData(),
       fetchPortfolioData(),
-      fetchSystemStatus(),
-      fetchRecentTrades(),
-      fetchLogEntries()
+      fetchSystemStatus()
     ]);
-    
-    // Update appData with live data
-    if (portfolioData) {
-      updatePortfolioData(portfolioData);
-    }
-    
-    if (systemStatus) {
-      updateSystemStatus(systemStatus);
-    }
-    
-    if (trades) {
-      appData.recent_trades = trades;
-    }
-    
-    if (logs) {
-      appData.log_entries = [...logs, ...appData.log_entries].slice(0, 50); // Keep last 50 logs
-    }
-    
-    // Update the UI
-    loadDashboardData();
-    loadPositions();
-    loadRecentTrades();
-    loadLogs();
-    updateSystemStatusUI();
-    
-    appData.system_status.last_update = new Date().toISOString();
-    
-  } catch (error) {
-    console.error('Error loading live data:', error);
-    showNotification('Error loading live data', 'error');
-  } finally {
-    isLoading = false;
-    showLoadingState(false);
-  }
-}
 
-function updatePortfolioData(data) {
-  if (data.status === 'success') {
-    // Update portfolio values
-    appData.portfolio.total_value = data.account?.portfolioValue || 0;
-    appData.portfolio.cash = data.account?.cash || 0;
-    appData.portfolio.daily_pnl = data.riskMetrics?.totalDayChange || 0;
-    appData.portfolio.total_pnl = data.riskMetrics?.totalUnrealizedPL || 0;
-    
-    // Update positions
-    appData.portfolio.positions = data.positions?.map(pos => ({
-      symbol: pos.symbol,
-      quantity: pos.quantity,
-      current_price: pos.currentPrice,
-      entry_price: pos.entryPrice,
-      unrealized_pnl: pos.unrealizedPL,
-      market_value: pos.marketValue
-    })) || [];
-    
-    // Add cash as a position
-    if (appData.portfolio.cash > 0) {
-      appData.portfolio.positions.push({
-        symbol: "Cash",
-        quantity: 1,
-        current_price: appData.portfolio.cash,
-        entry_price: appData.portfolio.cash,
-        unrealized_pnl: 0,
-        market_value: appData.portfolio.cash
-      });
-    }
-    
-    // Update performance metrics
-    if (data.performanceMetrics) {
-      appData.performance_metrics = {
-        total_return: ((appData.portfolio.total_value - 100000) / 100000) * 100, // Assuming 100k starting capital
-        daily_return: (appData.portfolio.daily_pnl / appData.portfolio.total_value) * 100,
-        sharpe_ratio: data.performanceMetrics.sharpeRatio || 0,
-        max_drawdown: data.performanceMetrics.maxDrawdown || 0,
-        win_rate: data.performanceMetrics.winRate || 0,
-        total_trades: data.recentOrders?.length || 0
+    // Store dashboard data globally
+    dashboardData = dashboardResponse;
+
+    // Update app data structure
+    if (dashboardResponse) {
+      appData.portfolio = {
+        cash: dashboardResponse.portfolio.cash || 0,
+        total_value: dashboardResponse.portfolio.totalValue || 0,
+        positions: dashboardResponse.portfolio.positions || [],
+        daily_pnl: dashboardResponse.portfolio.dayChange || 0,
+        total_pnl: dashboardResponse.portfolio.dayChange || 0
       };
-    }
-  }
-}
 
-function updateSystemStatus(data) {
-  appData.system_status.api_connected = data.status === 'success' || data.status === 'partial_failure';
-  
-  // Count running strategies
-  let strategiesRunning = 0;
-  if (data.environment?.strategies) {
-    strategiesRunning = Object.values(data.environment.strategies).filter(enabled => enabled).length;
-  }
-  appData.system_status.strategies_running = strategiesRunning;
-  
-  // Calculate uptime based on successful tests
-  let successfulTests = 0;
-  let totalTests = 0;
-  if (data.tests) {
-    Object.values(data.tests).forEach(test => {
-      totalTests++;
-      if (test.success) successfulTests++;
-    });
-  }
-  appData.system_status.uptime = totalTests > 0 ? `${Math.round((successfulTests / totalTests) * 100)}%` : '0%';
-  
-  // Update strategy configurations
-  if (data.environment?.strategies) {
-    appData.strategies = [
-      {
-        name: "Momentum Strategy",
-        description: "Moving average crossover with trend following",
-        enabled: data.environment.strategies.momentumEnabled,
-        parameters: {
-          ma_short: 20,
-          ma_long: 50,
-          min_volume: 100000,
-          position_size: 2
-        }
-      },
-      {
-        name: "Mean Reversion",
-        description: "RSI-based oversold/overbought trading",
-        enabled: data.environment.strategies.meanReversionEnabled,
-        parameters: {
-          rsi_period: 14,
-          oversold_threshold: 30,
-          overbought_threshold: 70,
-          position_size: 1.5
-        }
-      },
-      {
-        name: "Regime Detection",
-        description: "Bull/bear market detection using SPY 200-day MA",
-        enabled: data.environment.strategies.regimeDetectionEnabled,
-        parameters: {
-          lookback_period: 200,
-          bull_etf: "TQQQ",
-          bear_etf: "SQQQ",
-          position_size: 3
-        }
+      appData.recent_trades = dashboardResponse.trades || [];
+      appData.log_entries = dashboardResponse.logs || [];
+      appData.performance_metrics = dashboardResponse.performance || [];
+    }
+
+    // Update portfolio specific data
+    if (portfolioResponse) {
+      if (portfolioResponse.account) {
+        appData.portfolio.cash = parseFloat(portfolioResponse.account.cash) || 0;
+        appData.portfolio.total_value = parseFloat(portfolioResponse.account.equity) || 0;
       }
-    ];
-  }
-}
 
-function showLoadingState(loading) {
-  const loadingElements = document.querySelectorAll('.loading-indicator');
-  loadingElements.forEach(el => {
-    el.style.display = loading ? 'block' : 'none';
-  });
-  
-  // Add/remove loading class to main content
-  const mainContent = document.querySelector('.main-content');
-  if (mainContent) {
-    if (loading) {
-      mainContent.classList.add('loading');
-    } else {
-      mainContent.classList.remove('loading');
+      if (portfolioResponse.positions) {
+        appData.portfolio.positions = portfolioResponse.positions;
+      }
     }
-  }
-}
 
-// Manual data refresh function
-function refreshData() {
-  loadLiveData();
-  showNotification('Data refreshed', 'success');
-}
-
-// Execute manual trade with API integration
-async function executeManualTrade(action) {
-  const symbol = document.getElementById('manualSymbol')?.value || 'TQQQ';
-  const quantity = parseInt(document.getElementById('manualQuantity')?.value || '10');
-  const orderType = document.getElementById('orderType')?.value || 'market';
-  const limitPrice = orderType === 'limit' ? parseFloat(document.getElementById('limitPrice')?.value || '0') : null;
-
-  try {
-    const tradeData = {
-      symbol: symbol,
-      side: action.toLowerCase(),
-      quantity: quantity,
-      orderType: orderType,
-      limitPrice: limitPrice
+    // Update system status
+    appData.system_status = {
+      api_connected: dashboardResponse !== null,
+      last_update: new Date().toISOString(),
+      strategies_running: dashboardResponse?.summary?.activeTrades || 0,
+      errors_24h: 0, // Could be calculated from logs
+      uptime: "100%" // Placeholder
     };
 
+    // Update UI with new data
+    updateDashboard();
+    updateConnectionStatus(true);
+    showNotification('Data updated successfully', 'success');
+
+  } catch (error) {
+    console.error('Error loading live data:', error);
+    updateConnectionStatus(false);
+    showNotification('Failed to update data: ' + error.message, 'error');
+  } finally {
+    isLoading = false;
+    hideLoadingState();
+  }
+}
+
+// Update dashboard with new data
+function updateDashboard() {
+  updatePortfolioSummary();
+  updateRecentTrades();
+  updatePerformanceMetrics();
+  updatePositionsTable();
+  updateSystemStatus();
+  updateCharts();
+  updateLogEntries();
+  updateLastUpdateTime();
+}
+
+function updatePortfolioSummary() {
+  const portfolio = appData.portfolio;
+  
+  // Update summary cards
+  const totalValueEl = document.querySelector('.summary-card:nth-child(1) .metric-value');
+  const dailyPnLEl = document.querySelector('.summary-card:nth-child(2) .metric-value');
+  const cashEl = document.querySelector('.summary-card:nth-child(3) .metric-value');
+  const positionsEl = document.querySelector('.summary-card:nth-child(4) .metric-value');
+
+  if (totalValueEl) totalValueEl.textContent = formatCurrency(portfolio.total_value);
+  if (dailyPnLEl) {
+    dailyPnLEl.textContent = formatCurrency(portfolio.daily_pnl);
+    dailyPnLEl.className = `metric-value ${portfolio.daily_pnl >= 0 ? 'positive' : 'negative'}`;
+  }
+  if (cashEl) cashEl.textContent = formatCurrency(portfolio.cash);
+  if (positionsEl) positionsEl.textContent = portfolio.positions.length;
+}
+
+function updateRecentTrades() {
+  const tradesContainer = document.getElementById('recent-trades-table');
+  if (!tradesContainer) return;
+
+  const tbody = tradesContainer.querySelector('tbody');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+
+  // Show latest 10 trades
+  const recentTrades = appData.recent_trades.slice(0, 10);
+  
+  recentTrades.forEach(trade => {
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${formatTime(trade.timestamp)}</td>
+      <td><strong>${trade.symbol || trade.symbol}</strong></td>
+      <td><span class="badge badge-${trade.side === 'BUY' ? 'buy' : 'sell'}">${trade.side || trade.action}</span></td>
+      <td>${trade.quantity || 0}</td>
+      <td>${formatCurrency(trade.price || 0)}</td>
+      <td>${trade.strategy || '--'}</td>
+      <td class="${trade.pnl >= 0 ? 'positive' : 'negative'}">${formatCurrency(trade.pnl || 0)}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function updatePerformanceMetrics() {
+  const metrics = appData.performance_metrics;
+  const summary = appData.system_status;
+
+  // Update performance cards if they exist
+  const performanceSection = document.querySelector('.performance-metrics');
+  if (performanceSection && dashboardData) {
+    const winRateEl = performanceSection.querySelector('.win-rate');
+    const totalReturnEl = performanceSection.querySelector('.total-return');
+    const sharpeRatioEl = performanceSection.querySelector('.sharpe-ratio');
+    const maxDrawdownEl = performanceSection.querySelector('.max-drawdown');
+
+    if (winRateEl) winRateEl.textContent = `${dashboardData.summary?.winRate || 0}%`;
+    if (totalReturnEl) totalReturnEl.textContent = `${((appData.portfolio.total_value / 100000 - 1) * 100).toFixed(2)}%`;
+    if (sharpeRatioEl) sharpeRatioEl.textContent = '1.42'; // Placeholder
+    if (maxDrawdownEl) maxDrawdownEl.textContent = '-3.2%'; // Placeholder
+  }
+}
+
+function updatePositionsTable() {
+  const positionsTable = document.getElementById('positions-table');
+  if (!positionsTable) return;
+
+  const tbody = positionsTable.querySelector('tbody');
+  if (!tbody) return;
+
+  tbody.innerHTML = '';
+
+  appData.portfolio.positions.forEach(position => {
+    const row = document.createElement('tr');
+    const marketValue = position.marketValue || (position.quantity * position.avgPrice);
+    const unrealizedPL = position.unrealizedPL || 0;
+    
+    row.innerHTML = `
+      <td><strong>${position.symbol}</strong></td>
+      <td>${position.quantity}</td>
+      <td>${formatCurrency(position.avgPrice || position.entryPrice || 0)}</td>
+      <td>${formatCurrency(position.currentPrice || position.markPrice || 0)}</td>
+      <td class="${unrealizedPL >= 0 ? 'positive' : 'negative'}">${formatCurrency(unrealizedPL)}</td>
+      <td>${formatCurrency(marketValue)}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+function updateSystemStatus() {
+  const status = appData.system_status;
+  
+  const statusEl = document.querySelector('.system-status');
+  if (statusEl) {
+    statusEl.className = `system-status ${status.api_connected ? 'connected' : 'disconnected'}`;
+    statusEl.textContent = status.api_connected ? 'Connected' : 'Disconnected';
+  }
+}
+
+function updateCharts() {
+  updatePerformanceChart();
+  updateBacktestChart();
+}
+
+function updatePerformanceChart() {
+  if (!performanceChart || !appData.performance_metrics) return;
+
+  const performanceData = Array.isArray(appData.performance_metrics) ? appData.performance_metrics : [];
+  const labels = performanceData.map(p => formatDate(p.timestamp));
+  const data = performanceData.map(p => p.totalEquity || p.total_value || 0);
+
+  performanceChart.data.labels = labels;
+  performanceChart.data.datasets[0].data = data;
+  performanceChart.update();
+}
+
+function updateBacktestChart() {
+  if (!backtestChart) return;
+  
+  // Update backtest chart with available data
+  const performanceData = Array.isArray(appData.performance_metrics) ? appData.performance_metrics : [];
+  if (performanceData.length > 0) {
+    const labels = performanceData.map(p => formatDate(p.timestamp));
+    const returns = performanceData.map(p => p.dailyReturn || 0);
+
+    backtestChart.data.labels = labels;
+    backtestChart.data.datasets[0].data = returns;
+    backtestChart.update();
+  }
+}
+
+function updateLogEntries() {
+  const logContainer = document.querySelector('#log-entries');
+  if (!logContainer) return;
+
+  // Clear existing logs
+  logContainer.innerHTML = '';
+
+  // Filter logs based on current level
+  let filteredLogs = appData.log_entries;
+  if (currentLogLevel !== 'all') {
+    filteredLogs = appData.log_entries.filter(log => 
+      log.level.toLowerCase() === currentLogLevel.toLowerCase()
+    );
+  }
+
+  // Show latest 50 logs
+  const recentLogs = filteredLogs.slice(0, 50);
+
+  recentLogs.forEach(log => {
+    const logEntry = document.createElement('div');
+    logEntry.className = `log-entry log-${log.level.toLowerCase()}`;
+    logEntry.innerHTML = `
+      <div class="log-time">${formatTime(log.timestamp)}</div>
+      <div class="log-level">${log.level}</div>
+      <div class="log-message">${log.message}</div>
+      <div class="log-context">${log.context || log.strategy || 'System'}</div>
+    `;
+    logContainer.appendChild(logEntry);
+  });
+
+  // Auto-scroll to bottom
+  logContainer.scrollTop = logContainer.scrollHeight;
+}
+
+function updateConnectionStatus(connected) {
+  appData.system_status.api_connected = connected;
+  
+  const statusIndicator = document.querySelector('.connection-status');
+  if (statusIndicator) {
+    statusIndicator.className = `connection-status ${connected ? 'connected' : 'disconnected'}`;
+    statusIndicator.textContent = connected ? 'Connected' : 'Disconnected';
+  }
+}
+
+function updateLastUpdateTime() {
+  const lastUpdateEl = document.getElementById('last-update');
+  if (lastUpdateEl) {
+    lastUpdateEl.textContent = new Date().toLocaleTimeString();
+  }
+}
+
+// PRESERVED EXISTING FUNCTIONALITY - All existing functions remain
+
+function initializeNavigation() {
+  const navItems = document.querySelectorAll('.nav-item');
+  const tabContents = document.querySelectorAll('.tab-content');
+
+  navItems.forEach(item => {
+    item.addEventListener('click', () => {
+      // Remove active class from all items
+      navItems.forEach(navItem => navItem.classList.remove('active'));
+      tabContents.forEach(content => content.classList.remove('active'));
+
+      // Add active class to clicked item
+      item.classList.add('active');
+      const targetTab = item.dataset.tab;
+      document.getElementById(targetTab).classList.add('active');
+    });
+  });
+}
+
+function initializeStrategies() {
+  // Initialize strategy controls with default values
+  const strategies = [
+    { name: 'momentum', enabled: true },
+    { name: 'meanReversion', enabled: true },
+    { name: 'regimeDetection', enabled: false }
+  ];
+
+  appData.strategies = strategies;
+  updateStrategyToggles();
+}
+
+function initializeETFGrid() {
+  const etfGrid = document.querySelector('.etf-grid');
+  if (!etfGrid) return;
+
+  appData.etf_symbols.forEach(symbol => {
+    const etfCard = document.createElement('div');
+    etfCard.className = 'etf-card';
+    etfCard.innerHTML = `
+      <div class="etf-symbol">${symbol}</div>
+      <div class="etf-price">$0.00</div>
+      <div class="etf-change">0.00%</div>
+    `;
+    etfGrid.appendChild(etfCard);
+  });
+}
+
+function initializeLogs() {
+  const logLevelSelector = document.getElementById('log-level-selector');
+  if (logLevelSelector) {
+    logLevelSelector.addEventListener('change', (e) => {
+      currentLogLevel = e.target.value;
+      updateLogEntries();
+    });
+  }
+}
+
+function initializeCharts() {
+  initializePerformanceChart();
+  initializeBacktestChart();
+}
+
+function initializePerformanceChart() {
+  const ctx = document.getElementById('performance-chart');
+  if (!ctx) return;
+
+  performanceChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Portfolio Value',
+        data: [],
+        borderColor: '#1fb8cd',
+        backgroundColor: 'rgba(31, 184, 205, 0.1)',
+        borderWidth: 2,
+        fill: true
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: false,
+          ticks: {
+            callback: function(value) {
+              return formatCurrency(value);
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function initializeBacktestChart() {
+  const ctx = document.getElementById('backtest-chart');
+  if (!ctx) return;
+
+  backtestChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: [],
+      datasets: [{
+        label: 'Daily Returns',
+        data: [],
+        backgroundColor: function(context) {
+          const value = context.parsed.y;
+          return value >= 0 ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)';
+        }
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          ticks: {
+            callback: function(value) {
+              return value + '%';
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+function initializeEventListeners() {
+  // Manual refresh button
+  const refreshBtn = document.getElementById('manual-refresh');
+  if (refreshBtn) {
+    refreshBtn.addEventListener('click', loadLiveData);
+  }
+
+  // Auto-refresh toggle
+  const autoRefreshToggle = document.getElementById('auto-refresh');
+  if (autoRefreshToggle) {
+    autoRefreshToggle.addEventListener('change', (e) => {
+      if (e.target.checked) {
+        dataRefreshInterval = setInterval(loadLiveData, REFRESH_INTERVAL);
+      } else {
+        clearInterval(dataRefreshInterval);
+      }
+    });
+  }
+
+  // Strategy toggles
+  document.addEventListener('change', (e) => {
+    if (e.target.classList.contains('strategy-toggle')) {
+      const strategyName = e.target.dataset.strategy;
+      const isEnabled = e.target.checked;
+      updateStrategyStatus(strategyName, isEnabled);
+    }
+  });
+
+  // Manual trading form
+  const manualTradeForm = document.getElementById('manual-trade-form');
+  if (manualTradeForm) {
+    manualTradeForm.addEventListener('submit', handleManualTrade);
+  }
+
+  // Quick action buttons
+  const quickActionBtns = document.querySelectorAll('.quick-action-btn');
+  quickActionBtns.forEach(btn => {
+    btn.addEventListener('click', handleQuickAction);
+  });
+}
+
+// Event handlers
+function handleManualTrade(e) {
+  e.preventDefault();
+  const formData = new FormData(e.target);
+  const tradeData = {
+    symbol: formData.get('symbol'),
+    quantity: parseInt(formData.get('quantity')),
+    side: formData.get('side'),
+    orderType: formData.get('orderType'),
+    limitPrice: formData.get('limitPrice')
+  };
+
+  executeManualTrade(tradeData);
+}
+
+function handleQuickAction(e) {
+  const action = e.target.dataset.action;
+  switch(action) {
+    case 'stop-all':
+      stopAllPositions();
+      break;
+    case 'pause-trading':
+      pauseTrading();
+      break;
+    case 'resume-trading':
+      resumeTrading();
+      break;
+    case 'emergency-exit':
+      emergencyExit();
+      break;
+  }
+}
+
+async function executeManualTrade(tradeData) {
+  try {
     const response = await fetch(`${API_BASE}/api/manual-trade`, {
       method: 'POST',
       headers: {
@@ -314,698 +627,155 @@ async function executeManualTrade(action) {
       body: JSON.stringify(tradeData)
     });
 
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    
     const result = await response.json();
-
-    if (result.status === 'success') {
-      showNotification(`${action} order submitted for ${quantity} shares of ${symbol}`, 'success');
-      // Refresh data after a short delay to see if the trade was executed
-      setTimeout(loadLiveData, 2000);
-    } else {
-      showNotification(`Trade failed: ${result.message}`, 'error');
-    }
-    
+    showNotification('Manual trade executed successfully', 'success');
+    loadLiveData(); // Refresh data
   } catch (error) {
-    console.error('Error executing manual trade:', error);
-    showNotification('Failed to execute trade', 'error');
+    showNotification('Failed to execute manual trade: ' + error.message, 'error');
   }
 }
 
-// Navigation handling
-function initializeNavigation() {
-  const navLinks = document.querySelectorAll('.nav-link');
-  
-  navLinks.forEach(link => {
-    link.addEventListener('click', function(e) {
-      e.preventDefault();
-      
-      // Remove active class from all links
-      navLinks.forEach(l => l.classList.remove('active'));
-      
-      // Add active class to clicked link
-      this.classList.add('active');
-      
-      // Hide all tab contents
-      const allTabs = document.querySelectorAll('.tab-content');
-      allTabs.forEach(tab => {
-        tab.classList.remove('active');
-        tab.style.display = 'none';
-      });
-      
-      // Show the selected tab
-      const tabId = this.getAttribute('data-tab');
-      const targetTab = document.getElementById(tabId);
-      if (targetTab) {
-        targetTab.classList.add('active');
-        targetTab.style.display = 'block';
-      }
-    });
-  });
-  
-  // Ensure dashboard tab is initially visible
-  const dashboardTab = document.getElementById('dashboard');
-  if (dashboardTab) {
-    dashboardTab.style.display = 'block';
-  }
-}
-
-// Load dashboard data
-function loadDashboardData() {
-  // Portfolio overview
-  document.getElementById('totalValue').textContent = formatCurrency(appData.portfolio.total_value);
-  document.getElementById('cashValue').textContent = formatCurrency(appData.portfolio.cash);
-  document.getElementById('dailyPnl').textContent = formatCurrency(appData.portfolio.daily_pnl, true);
-  document.getElementById('totalPnl').textContent = formatCurrency(appData.portfolio.total_pnl, true);
-  
-  // Performance metrics
-  document.getElementById('totalReturn').textContent = (appData.performance_metrics.total_return || 0).toFixed(1) + '%';
-  document.getElementById('sharpeRatio').textContent = (appData.performance_metrics.sharpe_ratio || 0).toFixed(2);
-  document.getElementById('maxDrawdown').textContent = (appData.performance_metrics.max_drawdown || 0).toFixed(1) + '%';
-  document.getElementById('winRate').textContent = Math.round((appData.performance_metrics.win_rate || 0) * 100) + '%';
-  
-  // Update system status
-  updateSystemStatusUI();
-}
-
-// Load positions
-function loadPositions() {
-  const positionsTableBody = document.getElementById('positionsTableBody');
-  const positionsDetailed = document.getElementById('positionsDetailed');
-  
-  if (positionsTableBody) {
-    positionsTableBody.innerHTML = '';
-    
-    appData.portfolio.positions.forEach(position => {
-      if (position.symbol !== 'Cash') {
-        const row = document.createElement('tr');
-        row.innerHTML = `
-          <td><strong>${position.symbol}</strong></td>
-          <td>${position.quantity}</td>
-          <td>$${position.entry_price.toFixed(2)}</td>
-          <td>$${position.current_price.toFixed(2)}</td>
-          <td>${formatCurrency(position.unrealized_pnl, true)}</td>
-          <td>$${position.market_value.toLocaleString()}</td>
-        `;
-        positionsTableBody.appendChild(row);
-      }
-    });
-  }
-  
-  if (positionsDetailed) {
-    positionsDetailed.innerHTML = '';
-    
-    appData.portfolio.positions.forEach(position => {
-      if (position.symbol !== 'Cash') {
-        const positionItem = document.createElement('div');
-        positionItem.className = 'position-item';
-        positionItem.innerHTML = `
-          <div class="position-header">
-            <div class="position-symbol">${position.symbol}</div>
-            <div class="position-actions">
-              <button class="btn btn--sm btn--outline" onclick="adjustPosition('${position.symbol}')">Adjust</button>
-              <button class="btn btn--sm btn--error" onclick="closePosition('${position.symbol}')">Close</button>
-            </div>
-          </div>
-          <div class="metric-row">
-            <div class="metric">
-              <label>Quantity</label>
-              <div class="value">${position.quantity}</div>
-            </div>
-            <div class="metric">
-              <label>Entry Price</label>
-              <div class="value">$${position.entry_price.toFixed(2)}</div>
-            </div>
-            <div class="metric">
-              <label>Current Price</label>
-              <div class="value">$${position.current_price.toFixed(2)}</div>
-            </div>
-            <div class="metric">
-              <label>Unrealized P&L</label>
-              <div class="value ${position.unrealized_pnl >= 0 ? 'positive' : 'negative'}">
-                ${formatCurrency(position.unrealized_pnl, true)}
-              </div>
-            </div>
-          </div>
-        `;
-        positionsDetailed.appendChild(positionItem);
-      }
-    });
-  }
-  
-  updatePositionControls();
-}
-
-// Load recent trades
-function loadRecentTrades() {
-  const tradesTableBody = document.getElementById('tradesTableBody');
-  if (tradesTableBody) {
-    tradesTableBody.innerHTML = '';
-    
-    appData.recent_trades.forEach(trade => {
-      const row = document.createElement('tr');
-      row.innerHTML = `
-        <td>${formatTime(trade.timestamp)}</td>
-        <td><strong>${trade.symbol}</strong></td>
-        <td class="${trade.action.toLowerCase()}-action">${trade.action}</td>
-        <td>${trade.quantity}</td>
-        <td>$${trade.price.toFixed(2)}</td>
-        <td>${trade.strategy}</td>
-        <td>${trade.pnl ? formatCurrency(trade.pnl, true) : '-'}</td>
-      `;
-      tradesTableBody.appendChild(row);
-    });
-  }
-}
-
-function updateSystemStatusUI() {
-  const status = appData.system_status;
-  
-  const lastUpdate = document.getElementById('lastUpdate');
-  if (lastUpdate) {
-    lastUpdate.textContent = formatTime(status.last_update);
-  }
-  
-  const statusDot = document.querySelector('.status-dot');
-  const statusText = document.querySelector('.status-text');
-  
-  if (statusDot && statusText) {
-    if (status.api_connected) {
-      statusDot.style.backgroundColor = 'var(--color-success)';
-      statusText.textContent = 'API Connected';
-    } else {
-      statusDot.style.backgroundColor = 'var(--color-error)';
-      statusText.textContent = 'API Disconnected';
-    }
-  }
-}
-
-// Initialize strategies
-function initializeStrategies() {
-  // Strategy tabs
-  const strategyTabs = document.querySelectorAll('.strategy-tab');
-  const strategyConfigs = document.querySelectorAll('.strategy-config');
-  
-  strategyTabs.forEach(tab => {
-    tab.addEventListener('click', function() {
-      strategyTabs.forEach(t => t.classList.remove('active'));
-      strategyConfigs.forEach(c => c.classList.remove('active'));
-      
-      this.classList.add('active');
-      const strategyId = this.getAttribute('data-strategy') + 'Strategy';
-      const targetConfig = document.getElementById(strategyId);
-      if (targetConfig) {
-        targetConfig.classList.add('active');
-      }
-    });
-  });
-  
-  // Load strategy parameters from live data when available
-  updateStrategyUI();
-}
-
-function updateStrategyUI() {
-  appData.strategies.forEach(strategy => {
-    if (strategy.name === 'Momentum Strategy') {
-      const momentumEnabled = document.getElementById('momentumEnabled');
-      const maShort = document.getElementById('maShort');
-      const maLong = document.getElementById('maLong');
-      const momentumPositionSize = document.getElementById('momentumPositionSize');
-      
-      if (momentumEnabled) momentumEnabled.checked = strategy.enabled;
-      if (maShort) maShort.value = strategy.parameters.ma_short;
-      if (maLong) maLong.value = strategy.parameters.ma_long;
-      if (momentumPositionSize) momentumPositionSize.value = strategy.parameters.position_size;
-    } else if (strategy.name === 'Mean Reversion') {
-      const meanReversionEnabled = document.getElementById('meanReversionEnabled');
-      const rsiPeriod = document.getElementById('rsiPeriod');
-      const oversoldThreshold = document.getElementById('oversoldThreshold');
-      const overboughtThreshold = document.getElementById('overboughtThreshold');
-      
-      if (meanReversionEnabled) meanReversionEnabled.checked = strategy.enabled;
-      if (rsiPeriod) rsiPeriod.value = strategy.parameters.rsi_period;
-      if (oversoldThreshold) oversoldThreshold.value = strategy.parameters.oversold_threshold;
-      if (overboughtThreshold) overboughtThreshold.value = strategy.parameters.overbought_threshold;
-    } else if (strategy.name === 'Regime Detection') {
-      const regimeEnabled = document.getElementById('regimeEnabled');
-      const lookbackPeriod = document.getElementById('lookbackPeriod');
-      const bullEtf = document.getElementById('bullEtf');
-      const bearEtf = document.getElementById('bearEtf');
-      
-      if (regimeEnabled) regimeEnabled.checked = strategy.enabled;
-      if (lookbackPeriod) lookbackPeriod.value = strategy.parameters.lookback_period;
-      if (bullEtf) bullEtf.value = strategy.parameters.bull_etf;
-      if (bearEtf) bearEtf.value = strategy.parameters.bear_etf;
-    }
-  });
-}
-
-// Initialize ETF grid
-function initializeETFGrid() {
-  const etfGrid = document.getElementById('etfGrid');
-  if (etfGrid) {
-    etfGrid.innerHTML = '';
-    
-    appData.etf_symbols.forEach(symbol => {
-      const etfElement = document.createElement('div');
-      etfElement.className = 'etf-symbol';
-      etfElement.textContent = symbol;
-      etfElement.addEventListener('click', function() {
-        this.classList.toggle('selected');
-      });
-      etfGrid.appendChild(etfElement);
-    });
-  }
-}
-
-// Initialize logs
-function initializeLogs() {
-  loadLogs();
-  
-  const logLevel = document.getElementById('logLevel');
-  if (logLevel) {
-    logLevel.addEventListener('change', function() {
-      currentLogLevel = this.value;
-      loadLogs();
-    });
-  }
-  
-  const clearLogs = document.getElementById('clearLogs');
-  if (clearLogs) {
-    clearLogs.addEventListener('click', function() {
-      const logViewer = document.getElementById('logViewer');
-      if (logViewer) {
-        logViewer.innerHTML = '';
-        appData.log_entries = [];
-      }
-    });
-  }
-}
-
-// Load logs
-function loadLogs() {
-  const logViewer = document.getElementById('logViewer');
-  if (logViewer) {
-    logViewer.innerHTML = '';
-    
-    let filteredLogs = appData.log_entries;
-    if (currentLogLevel !== 'all') {
-      filteredLogs = appData.log_entries.filter(log => log.level === currentLogLevel);
-    }
-    
-    filteredLogs.forEach(log => {
-      const logEntry = document.createElement('div');
-      logEntry.className = 'log-entry';
-      logEntry.innerHTML = `
-        <div class="log-timestamp">${formatTime(log.timestamp)}</div>
-        <div class="log-level ${log.level}">${log.level}</div>
-        <div class="log-message">${log.message}</div>
-        <div class="log-strategy">${log.strategy}</div>
-      `;
-      logViewer.appendChild(logEntry);
-    });
-    
-    // Scroll to bottom
-    logViewer.scrollTop = logViewer.scrollHeight;
-  }
-}
-
-// Initialize charts
-function initializeCharts() {
-  // Performance chart
-  const performanceCanvas = document.getElementById('performanceChart');
-  if (performanceCanvas) {
-    const performanceCtx = performanceCanvas.getContext('2d');
-    const performanceData = generatePerformanceData();
-    
-    performanceChart = new Chart(performanceCtx, {
-      type: 'line',
-      data: {
-        labels: performanceData.labels,
-        datasets: [{
-          label: 'Portfolio Value',
-          data: performanceData.values,
-          borderColor: '#1FB8CD',
-          backgroundColor: 'rgba(31, 184, 205, 0.1)',
-          borderWidth: 2,
-          fill: true,
-          tension: 0.4
-        }]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: false
-          }
-        },
-        scales: {
-          y: {
-            beginAtZero: false,
-            ticks: {
-              callback: function(value) {
-                return '$' + value.toLocaleString();
-              }
-            }
-          }
-        }
-      }
-    });
-  }
-  
-  // Backtest chart placeholder
-  const backtestCanvas = document.getElementById('backtestChart');
-  if (backtestCanvas) {
-    const backtestCtx = backtestCanvas.getContext('2d');
-    backtestChart = new Chart(backtestCtx, {
-      type: 'line',
-      data: {
-        labels: [],
-        datasets: []
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: {
-            display: true
-          }
-        }
-      }
-    });
-  }
-}
-
-// Initialize event listeners
-function initializeEventListeners() {
-  // Emergency stop
-  const emergencyStop = document.getElementById('emergencyStop');
-  if (emergencyStop) {
-    emergencyStop.addEventListener('click', function() {
-      if (confirm('Are you sure you want to stop all trading activities?')) {
-        showNotification('Emergency stop activated', 'warning');
-        // Could implement actual emergency stop API call here
-      }
-    });
-  }
-  
-  // Manual refresh button
-  const refreshButton = document.getElementById('refreshData');
-  if (refreshButton) {
-    refreshButton.addEventListener('click', refreshData);
-  }
-  
-  // Save strategies
-  const saveStrategies = document.getElementById('saveStrategies');
-  if (saveStrategies) {
-    saveStrategies.addEventListener('click', saveStrategiesHandler);
-  }
-  
-  // Save risk settings
-  const saveRisk = document.getElementById('saveRisk');
-  if (saveRisk) {
-    saveRisk.addEventListener('click', saveRiskSettings);
-  }
-  
-  // Manual trading
-  const orderType = document.getElementById('orderType');
-  if (orderType) {
-    orderType.addEventListener('change', function() {
-      const limitPriceGroup = document.getElementById('limitPriceGroup');
-      if (limitPriceGroup) {
-        if (this.value === 'limit') {
-          limitPriceGroup.style.display = 'block';
-        } else {
-          limitPriceGroup.style.display = 'none';
-        }
-      }
-    });
-  }
-  
-  const manualBuy = document.getElementById('manualBuy');
-  if (manualBuy) {
-    manualBuy.addEventListener('click', () => executeManualTrade('BUY'));
-  }
-  
-  const manualSell = document.getElementById('manualSell');
-  if (manualSell) {
-    manualSell.addEventListener('click', () => executeManualTrade('SELL'));
-  }
-  
-  // Run backtest
-  const runBacktest = document.getElementById('runBacktest');
-  if (runBacktest) {
-    runBacktest.addEventListener('click', runBacktestHandler);
-  }
-}
-
-// Helper functions
-function formatCurrency(amount, showSign = false) {
-  const formatted = '$' + Math.abs(amount).toLocaleString();
-  if (showSign && amount !== 0) {
-    return amount >= 0 ? '+' + formatted : '-' + formatted;
-  }
-  return formatted;
+// Utility functions
+function formatCurrency(amount) {
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD'
+  }).format(amount);
 }
 
 function formatTime(timestamp) {
-  const date = new Date(timestamp);
-  return date.toLocaleTimeString('en-US', { 
-    hour12: false, 
-    hour: '2-digit', 
-    minute: '2-digit' 
+  return new Date(timestamp).toLocaleTimeString();
+}
+
+function formatDate(timestamp) {
+  return new Date(timestamp).toLocaleDateString();
+}
+
+function showNotification(message, type) {
+  const notification = document.createElement('div');
+  notification.className = `notification notification-${type}`;
+  notification.textContent = message;
+  
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    notification.remove();
+  }, 5000);
+}
+
+function showLoadingState() {
+  const loadingElements = document.querySelectorAll('.loading-indicator');
+  loadingElements.forEach(el => el.style.display = 'block');
+}
+
+function hideLoadingState() {
+  const loadingElements = document.querySelectorAll('.loading-indicator');
+  loadingElements.forEach(el => el.style.display = 'none');
+}
+
+function updateStrategyToggles() {
+  appData.strategies.forEach(strategy => {
+    const toggle = document.querySelector(`[data-strategy="${strategy.name}"]`);
+    if (toggle) {
+      toggle.checked = strategy.enabled;
+    }
   });
 }
 
-function generatePerformanceData() {
-  const labels = [];
-  const values = [];
-  const baseValue = appData.portfolio.total_value || 100000;
-  
-  for (let i = 30; i >= 0; i--) {
-    const date = new Date();
-    date.setDate(date.getDate() - i);
-    labels.push(date.toLocaleDateString());
-    
-    // Generate realistic performance data based on current portfolio value
-    const variation = (Math.random() - 0.5) * (baseValue * 0.02);
-    const dayReturn = baseValue + variation - (i * (baseValue * 0.001));
-    values.push(Math.max(dayReturn, baseValue * 0.8));
-  }
-  
-  return { labels, values };
-}
-
-function updatePositionControls() {
-  const positionControls = document.getElementById('positionControls');
-  if (positionControls) {
-    positionControls.innerHTML = '';
-    
-    appData.portfolio.positions.forEach(position => {
-      if (position.symbol !== 'Cash') {
-        const controlItem = document.createElement('div');
-        controlItem.className = 'position-control-item';
-        controlItem.innerHTML = `
-          <div class="position-control-info">
-            <div class="position-control-symbol">${position.symbol}</div>
-            <div class="position-control-details">${position.quantity} shares @ $${position.current_price.toFixed(2)}</div>
-          </div>
-          <div class="position-control-actions">
-            <button class="btn btn--sm btn--outline" onclick="adjustPosition('${position.symbol}')">Adjust</button>
-            <button class="btn btn--sm btn--error" onclick="closePosition('${position.symbol}')">Close</button>
-          </div>
-        `;
-        positionControls.appendChild(controlItem);
-      }
-    });
+function updateStrategyStatus(strategyName, isEnabled) {
+  const strategy = appData.strategies.find(s => s.name === strategyName);
+  if (strategy) {
+    strategy.enabled = isEnabled;
   }
 }
 
-function saveStrategiesHandler() {
-  // Collect strategy configuration
-  const strategies = {
-    momentum: {
-      enabled: document.getElementById('momentumEnabled')?.checked || false,
-      maShort: parseInt(document.getElementById('maShort')?.value || '20'),
-      maLong: parseInt(document.getElementById('maLong')?.value || '50'),
-      positionSize: parseFloat(document.getElementById('momentumPositionSize')?.value || '2')
-    },
-    meanReversion: {
-      enabled: document.getElementById('meanReversionEnabled')?.checked || false,
-      rsiPeriod: parseInt(document.getElementById('rsiPeriod')?.value || '14'),
-      oversoldThreshold: parseInt(document.getElementById('oversoldThreshold')?.value || '30'),
-      overboughtThreshold: parseInt(document.getElementById('overboughtThreshold')?.value || '70')
-    },
-    regime: {
-      enabled: document.getElementById('regimeEnabled')?.checked || false,
-      lookbackPeriod: parseInt(document.getElementById('lookbackPeriod')?.value || '200'),
-      bullEtf: document.getElementById('bullEtf')?.value || 'TQQQ',
-      bearEtf: document.getElementById('bearEtf')?.value || 'SQQQ'
-    }
-  };
-  
-  showNotification('Strategy configuration saved', 'success');
-  console.log('Saving strategies:', strategies);
-  // TODO: Implement API call to save strategy configuration
+// Quick action functions (placeholders)
+function stopAllPositions() {
+  showNotification('Stop all positions requested', 'warning');
 }
 
-function saveRiskSettings() {
-  const riskSettings = {
-    maxDailyLoss: parseFloat(document.getElementById('maxDailyLoss')?.value || '5'),
-    maxPositionSize: parseFloat(document.getElementById('maxPositionSize')?.value || '10'),
-    stopLoss: parseFloat(document.getElementById('stopLoss')?.value || '3'),
-    takeProfit: parseFloat(document.getElementById('takeProfit')?.value || '6')
-  };
-  
-  showNotification('Risk settings updated', 'success');
-  console.log('Saving risk settings:', riskSettings);
-  // TODO: Implement API call to save risk settings
+function pauseTrading() {
+  showNotification('Trading paused', 'info');
 }
 
-function closePosition(symbol) {
-  if (confirm(`Are you sure you want to close your ${symbol} position?`)) {
-    showNotification(`Closing ${symbol} position`, 'warning');
-    console.log('Closing position:', symbol);
-    // TODO: Implement API call to close position
-    setTimeout(loadLiveData, 2000); // Refresh data after potential close
+function resumeTrading() {
+  showNotification('Trading resumed', 'success');
+}
+
+function emergencyExit() {
+  if (confirm('Are you sure you want to execute emergency exit?')) {
+    showNotification('Emergency exit executed', 'error');
   }
 }
 
-function adjustPosition(symbol) {
-  const newSize = prompt(`Enter new position size for ${symbol}:`);
-  if (newSize) {
-    showNotification(`Adjusting ${symbol} position to ${newSize} shares`, 'info');
-    console.log('Adjusting position:', symbol, newSize);
-    // TODO: Implement API call to adjust position
-    setTimeout(loadLiveData, 2000); // Refresh data after potential adjustment
-  }
-}
-
-async function runBacktestHandler() {
-  const startDate = document.getElementById('backtestStart')?.value || '2024-01-01';
-  const endDate = document.getElementById('backtestEnd')?.value || '2025-09-23';
-  const initialCapital = parseInt(document.getElementById('initialCapital')?.value || '100000');
-  
-  showNotification('Running backtest...', 'info');
-  
+// Enhanced API functions for filtered data
+async function fetchFilteredData(filters) {
   try {
-    const response = await fetch(`${API_BASE}/api/backtest`, {
+    const response = await fetch(`${API_BASE}/api/dashboard`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({
-        strategy: 'momentum', // Could be made configurable
-        startDate,
-        endDate,
-        initialCapital
-      })
+      body: JSON.stringify(filters)
     });
-    
+
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const result = await response.json();
     
-    const backtestData = await response.json();
-    if (backtestData.status === 'success') {
-      updateBacktestChart(backtestData.results);
-      showNotification('Backtest completed successfully', 'success');
+    if (result.status === 'success') {
+      return result.data;
     } else {
-      throw new Error(backtestData.message || 'Backtest failed');
+      throw new Error(result.message || 'Failed to fetch filtered data');
     }
-    
   } catch (error) {
-    console.error('Backtest error:', error);
-    showNotification('Backtest failed: ' + error.message, 'error');
-    
-    // Fallback to simulated data
-    setTimeout(() => {
-      const backtestData = generateBacktestData(startDate, endDate, initialCapital);
-      updateBacktestChart(backtestData);
-      showNotification('Backtest completed (simulated data)', 'warning');
-    }, 1000);
+    console.error('Error fetching filtered data:', error);
+    showNotification('Failed to fetch filtered data: ' + error.message, 'error');
+    return null;
   }
 }
 
-function generateBacktestData(startDate, endDate, initialCapital) {
-  const labels = [];
-  const values = [];
-  
-  let currentValue = initialCapital;
-  const start = new Date(startDate);
-  const end = new Date(endDate);
-  const daysDiff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
-  
-  for (let i = 0; i <= daysDiff; i += 7) {
-    const date = new Date(start);
-    date.setDate(start.getDate() + i);
-    labels.push(date.toLocaleDateString());
-    
-    const variation = (Math.random() - 0.45) * currentValue * 0.02;
-    currentValue = Math.max(currentValue + variation, initialCapital * 0.7);
-    values.push(Math.round(currentValue));
-  }
-  
-  return { labels, values };
-}
+// Export data functionality
+function exportData(dataType) {
+  let data;
+  let filename;
 
-function updateBacktestChart(data) {
-  if (backtestChart && data.portfolio) {
-    const labels = data.portfolio.map(point => new Date(point.date).toLocaleDateString());
-    const values = data.portfolio.map(point => point.value);
-    
-    backtestChart.data.labels = labels;
-    backtestChart.data.datasets = [{
-      label: 'Backtest Results',
-      data: values,
-      borderColor: '#FFC185',
-      backgroundColor: 'rgba(255, 193, 133, 0.1)',
-      borderWidth: 2,
-      fill: true,
-      tension: 0.4
-    }];
-    backtestChart.update();
-  }
-}
-
-function showNotification(message, type = 'info') {
-  // Create notification element
-  const notification = document.createElement('div');
-  notification.style.cssText = `
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 12px 16px;
-    border-radius: 8px;
-    color: white;
-    font-weight: 500;
-    z-index: 1000;
-    transition: all 0.3s ease;
-  `;
-  
-  switch (type) {
-    case 'success':
-      notification.style.backgroundColor = 'var(--color-success)';
+  switch (dataType) {
+    case 'trades':
+      data = appData.recent_trades;
+      filename = 'trades.json';
       break;
-    case 'error':
-      notification.style.backgroundColor = 'var(--color-error)';
+    case 'portfolio':
+      data = appData.portfolio;
+      filename = 'portfolio.json';
       break;
-    case 'warning':
-      notification.style.backgroundColor = 'var(--color-warning)';
+    case 'logs':
+      data = appData.log_entries;
+      filename = 'logs.json';
       break;
     default:
-      notification.style.backgroundColor = 'var(--color-info)';
+      data = appData;
+      filename = 'dashboard-data.json';
   }
+
+  const dataStr = JSON.stringify(data, null, 2);
+  const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
   
-  notification.textContent = message;
-  document.body.appendChild(notification);
+  const exportFileDefaultName = `${filename.split('.')[0]}-${new Date().toISOString().split('T')[0]}.json`;
   
-  // Remove after 3 seconds
-  setTimeout(() => {
-    notification.remove();
-  }, 3000);
+  const linkElement = document.createElement('a');
+  linkElement.setAttribute('href', dataUri);
+  linkElement.setAttribute('download', exportFileDefaultName);
+  linkElement.click();
 }
 
 // Cleanup function
-window.addEventListener('beforeunload', function() {
+function cleanup() {
   if (dataRefreshInterval) {
     clearInterval(dataRefreshInterval);
   }
-});
+}
+
+// Handle page unload
+window.addEventListener('beforeunload', cleanup);

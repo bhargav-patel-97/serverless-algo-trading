@@ -1,0 +1,1320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Algorithmic Trading Dashboard - Live Analytics</title>
+    <meta name="description" content="Real-time algorithmic trading dashboard with comprehensive analytics, performance metrics, and trade monitoring">
+    
+    <!-- Chart.js for data visualization -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.min.js"></script>
+    
+    <!-- Dashboard Styles -->
+    <style>
+        :root {
+            --primary-color: #1fb8cd;
+            --secondary-color: #ffc185;
+            --success-color: #22c55e;
+            --warning-color: #f59e0b;
+            --error-color: #ef4444;
+            --background-color: #f8fafc;
+            --surface-color: #ffffff;
+            --text-color: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+            --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .dashboard {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .dashboard-header {
+            background: var(--surface-color);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 2rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-color);
+            margin-bottom: 0.25rem;
+        }
+
+        .market-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.875rem;
+            color: var(--text-muted);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: var(--error-color);
+        }
+
+        .status-indicator.open {
+            background-color: var(--success-color);
+        }
+
+        .header-right {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn--primary {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn--secondary {
+            background-color: var(--surface-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+        }
+
+        .btn:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        .last-update {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        /* Navigation */
+        .dashboard-nav {
+            background: var(--surface-color);
+            border-bottom: 1px solid var(--border-color);
+            padding: 0 2rem;
+        }
+
+        .nav-tabs {
+            display: flex;
+            list-style: none;
+            overflow-x: auto;
+        }
+
+        .nav-tab {
+            padding: 1rem 1.5rem;
+            cursor: pointer;
+            color: var(--text-muted);
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .nav-tab:hover,
+        .nav-tab.active {
+            color: var(--primary-color);
+            border-bottom-color: var(--primary-color);
+        }
+
+        /* Main Content */
+        .dashboard-content {
+            flex: 1;
+            padding: 2rem;
+        }
+
+        /* Grid System */
+        .grid {
+            display: grid;
+            gap: 1.5rem;
+        }
+
+        .grid-2 {
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        }
+
+        .grid-3 {
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        }
+
+        .grid-4 {
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        }
+
+        /* Cards */
+        .card {
+            background: var(--surface-color);
+            border-radius: 0.5rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+            overflow: hidden;
+        }
+
+        .card-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: between;
+        }
+
+        .card-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-color);
+            margin: 0;
+        }
+
+        .card-content {
+            padding: 1rem;
+        }
+
+        /* Summary Cards */
+        .summary-card {
+            background: var(--surface-color);
+            border-radius: 0.5rem;
+            padding: 1.5rem;
+            box-shadow: var(--shadow);
+            border: 1px solid var(--border-color);
+        }
+
+        .summary-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1rem;
+        }
+
+        .summary-title {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-muted);
+            text-transform: uppercase;
+        }
+
+        .summary-icon {
+            font-size: 1.5rem;
+        }
+
+        .summary-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--text-color);
+            margin-bottom: 0.5rem;
+        }
+
+        .summary-change {
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .positive {
+            color: var(--success-color);
+        }
+
+        .negative {
+            color: var(--error-color);
+        }
+
+        /* Tables */
+        .table-container {
+            overflow-x: auto;
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.875rem;
+        }
+
+        .table th,
+        .table td {
+            padding: 0.75rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .table th {
+            background-color: var(--background-color);
+            font-weight: 600;
+            color: var(--text-color);
+            position: sticky;
+            top: 0;
+        }
+
+        .table tbody tr:hover {
+            background-color: var(--background-color);
+        }
+
+        /* Forms */
+        .form-group {
+            margin-bottom: 1rem;
+        }
+
+        .form-label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--text-color);
+        }
+
+        .form-input,
+        .form-select {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 0.375rem;
+            font-size: 0.875rem;
+            background-color: var(--surface-color);
+            color: var(--text-color);
+        }
+
+        .form-input:focus,
+        .form-select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgb(31 184 205 / 0.1);
+        }
+
+        /* Badges */
+        .badge {
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+
+        .badge-success {
+            background-color: var(--success-color);
+            color: white;
+        }
+
+        .badge-warning {
+            background-color: var(--warning-color);
+            color: white;
+        }
+
+        .badge-error {
+            background-color: var(--error-color);
+            color: white;
+        }
+
+        .badge-info {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        /* Filters */
+        .filters {
+            background: var(--surface-color);
+            border: 1px solid var(--border-color);
+            border-radius: 0.5rem;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .filters-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        /* Loading */
+        .loading {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            color: var(--text-muted);
+        }
+
+        .spinner {
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--border-color);
+            border-top: 2px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .dashboard-header {
+                padding: 1rem;
+                flex-direction: column;
+                gap: 1rem;
+                align-items: stretch;
+            }
+
+            .header-right {
+                justify-content: space-between;
+            }
+
+            .dashboard-content {
+                padding: 1rem;
+            }
+
+            .nav-tab {
+                padding: 0.75rem 1rem;
+            }
+
+            .summary-value {
+                font-size: 1.5rem;
+            }
+        }
+
+        /* Tab Content */
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        /* Chart Container */
+        .chart-container {
+            position: relative;
+            height: 300px;
+            margin-bottom: 1rem;
+        }
+
+        .chart-container canvas {
+            max-height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="dashboard">
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="header-left">
+                <h1>🚀 Algorithmic Trading Dashboard</h1>
+                <div class="market-status">
+                    <span class="status-indicator" id="marketIndicator"></span>
+                    <span class="status-text" id="marketStatusText">Loading...</span>
+                </div>
+            </div>
+            <div class="header-right">
+                <button class="btn btn--secondary" id="refreshBtn">
+                    <span>🔄</span> Refresh
+                </button>
+                <button class="btn btn--secondary" id="exportBtn">
+                    <span>📊</span> Export
+                </button>
+                <div class="last-update">
+                    Last update: <span id="lastUpdate">--</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Navigation -->
+        <nav class="dashboard-nav">
+            <ul class="nav-tabs">
+                <li class="nav-tab active" data-tab="overview">📊 Overview</li>
+                <li class="nav-tab" data-tab="trades">💼 Trades</li>
+                <li class="nav-tab" data-tab="performance">📈 Performance</li>
+                <li class="nav-tab" data-tab="logs">📋 Logs</li>
+                <li class="nav-tab" data-tab="strategies">⚙️ Strategies</li>
+            </ul>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="dashboard-content">
+            <!-- Overview Tab -->
+            <div id="overview" class="tab-content active">
+                <!-- Portfolio Summary -->
+                <div class="grid grid-4" style="margin-bottom: 2rem;">
+                    <div class="summary-card">
+                        <div class="summary-header">
+                            <h3 class="summary-title">Total Portfolio Value</h3>
+                            <span class="summary-icon">💰</span>
+                        </div>
+                        <div class="summary-value" id="portfolioValue">$105,432.50</div>
+                        <div class="summary-change positive" id="portfolioChange">+$1,250.75 (+1.20%)</div>
+                    </div>
+
+                    <div class="summary-card">
+                        <div class="summary-header">
+                            <h3 class="summary-title">Daily P&L</h3>
+                            <span class="summary-icon">📈</span>
+                        </div>
+                        <div class="summary-value" id="dailyPnL">+$1,250.75</div>
+                        <div class="summary-change positive" id="dailyReturn">+1.20%</div>
+                    </div>
+
+                    <div class="summary-card">
+                        <div class="summary-header">
+                            <h3 class="summary-title">Active Positions</h3>
+                            <span class="summary-icon">🎯</span>
+                        </div>
+                        <div class="summary-value" id="activePositions">2</div>
+                        <div class="summary-change" id="positionsChange">2 symbols</div>
+                    </div>
+
+                    <div class="summary-card">
+                        <div class="summary-header">
+                            <h3 class="summary-title">Win Rate</h3>
+                            <span class="summary-icon">🏆</span>
+                        </div>
+                        <div class="summary-value" id="winRate">64.8%</div>
+                        <div class="summary-change" id="totalTrades">145 trades</div>
+                    </div>
+                </div>
+
+                <!-- Charts Row -->
+                <div class="grid grid-2" style="margin-bottom: 2rem;">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Portfolio Performance</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="chart-container">
+                                <canvas id="performanceChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Strategy Breakdown</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="chart-container">
+                                <canvas id="strategyChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Activity -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Recent Trades</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="table-container">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Time</th>
+                                        <th>Symbol</th>
+                                        <th>Action</th>
+                                        <th>Quantity</th>
+                                        <th>Price</th>
+                                        <th>Strategy</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recentTradesTable">
+                                    <!-- Populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Trades Tab -->
+            <div id="trades" class="tab-content">
+                <!-- Filters -->
+                <div class="filters">
+                    <div class="filters-grid">
+                        <div class="form-group">
+                            <label class="form-label">Date From</label>
+                            <input type="date" class="form-input" id="dateFrom">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Date To</label>
+                            <input type="date" class="form-input" id="dateTo">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Strategy</label>
+                            <select class="form-select" id="strategyFilter">
+                                <option value="">All Strategies</option>
+                                <option value="SPY_Momentum">SPY Momentum</option>
+                                <option value="QQQ_Momentum">QQQ Momentum</option>
+                                <option value="SPY_RegimeDetection">SPY Regime</option>
+                                <option value="QQQ_RegimeDetection">QQQ Regime</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Symbol</label>
+                            <select class="form-select" id="symbolFilter">
+                                <option value="">All Symbols</option>
+                                <option value="TQQQ">TQQQ</option>
+                                <option value="SQQQ">SQQQ</option>
+                                <option value="UPRO">UPRO</option>
+                                <option value="SPXU">SPXU</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <button class="btn btn--primary" id="applyFilters">Apply Filters</button>
+                        <button class="btn btn--secondary" id="clearFilters">Clear</button>
+                    </div>
+                </div>
+
+                <!-- Trades Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">Trading History</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="table-container">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Symbol</th>
+                                        <th>Side</th>
+                                        <th>Quantity</th>
+                                        <th>Price</th>
+                                        <th>Value</th>
+                                        <th>Strategy</th>
+                                        <th>Order ID</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tradesTable">
+                                    <!-- Populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Tab -->
+            <div id="performance" class="tab-content">
+                <!-- Performance Metrics -->
+                <div class="grid grid-4" style="margin-bottom: 2rem;">
+                    <div class="summary-card">
+                        <div class="summary-header">
+                            <h3 class="summary-title">Total Return</h3>
+                            <span class="summary-icon">📊</span>
+                        </div>
+                        <div class="summary-value" id="totalReturn">+8.45%</div>
+                        <div class="summary-change positive">Since inception</div>
+                    </div>
+
+                    <div class="summary-card">
+                        <div class="summary-header">
+                            <h3 class="summary-title">Sharpe Ratio</h3>
+                            <span class="summary-icon">📐</span>
+                        </div>
+                        <div class="summary-value" id="sharpeRatio">1.42</div>
+                        <div class="summary-change">Risk-adjusted return</div>
+                    </div>
+
+                    <div class="summary-card">
+                        <div class="summary-header">
+                            <h3 class="summary-title">Max Drawdown</h3>
+                            <span class="summary-icon">📉</span>
+                        </div>
+                        <div class="summary-value negative" id="maxDrawdown">-3.2%</div>
+                        <div class="summary-change">Peak to trough</div>
+                    </div>
+
+                    <div class="summary-card">
+                        <div class="summary-header">
+                            <h3 class="summary-title">Volatility</h3>
+                            <span class="summary-icon">🌊</span>
+                        </div>
+                        <div class="summary-value" id="volatility">12.5%</div>
+                        <div class="summary-change">Annualized</div>
+                    </div>
+                </div>
+
+                <!-- Performance Charts -->
+                <div class="grid grid-2">
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Equity Curve</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="chart-container">
+                                <canvas id="equityCurveChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Daily Returns</h3>
+                        </div>
+                        <div class="card-content">
+                            <div class="chart-container">
+                                <canvas id="dailyReturnsChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div id="logs" class="tab-content">
+                <!-- Log Filters -->
+                <div class="filters">
+                    <div class="filters-grid">
+                        <div class="form-group">
+                            <label class="form-label">Log Level</label>
+                            <select class="form-select" id="logLevelFilter">
+                                <option value="">All Levels</option>
+                                <option value="INFO">Info</option>
+                                <option value="WARNING">Warning</option>
+                                <option value="ERROR">Error</option>
+                                <option value="SUCCESS">Success</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Strategy</label>
+                            <select class="form-select" id="logStrategyFilter">
+                                <option value="">All Strategies</option>
+                                <option value="SPY_Momentum">SPY Momentum</option>
+                                <option value="QQQ_Momentum">QQQ Momentum</option>
+                                <option value="SPY_RegimeDetection">SPY Regime</option>
+                                <option value="QQQ_RegimeDetection">QQQ Regime</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Search Message</label>
+                            <input type="text" class="form-input" id="logSearch" placeholder="Search log messages...">
+                        </div>
+                        <div class="form-group">
+                            <label class="form-label">Auto Refresh</label>
+                            <select class="form-select" id="autoRefresh">
+                                <option value="off">Off</option>
+                                <option value="30">30 seconds</option>
+                                <option value="60">1 minute</option>
+                                <option value="300">5 minutes</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="margin-top: 1rem;">
+                        <button class="btn btn--primary" id="applyLogFilters">Apply Filters</button>
+                        <button class="btn btn--secondary" id="clearLogFilters">Clear</button>
+                    </div>
+                </div>
+
+                <!-- Logs Table -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3 class="card-title">System Logs</h3>
+                    </div>
+                    <div class="card-content">
+                        <div class="table-container">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Timestamp</th>
+                                        <th>Level</th>
+                                        <th>Context</th>
+                                        <th>Message</th>
+                                        <th>Strategy</th>
+                                        <th>Symbol</th>
+                                        <th>Details</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="logsTable">
+                                    <!-- Populated by JavaScript -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Strategies Tab -->
+            <div id="strategies" class="tab-content">
+                <div class="grid grid-2">
+                    <!-- Strategy Performance -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Strategy Performance</h3>
+                        </div>
+                        <div class="card-content">
+                            <div id="strategyPerformance">
+                                <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Strategy Status -->
+                    <div class="card">
+                        <div class="card-header">
+                            <h3 class="card-title">Strategy Status</h3>
+                        </div>
+                        <div class="card-content">
+                            <div id="strategyStatus">
+                                <!-- Populated by JavaScript -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // Dashboard Application Class
+        class TradingDashboard {
+            constructor() {
+                this.data = null;
+                this.charts = {};
+                this.autoRefreshInterval = null;
+                this.init();
+            }
+
+            async init() {
+                this.setupEventListeners();
+                this.setupTabs();
+                await this.loadData();
+                this.setupCharts();
+                this.startAutoRefresh();
+            }
+
+            setupEventListeners() {
+                document.getElementById('refreshBtn').addEventListener('click', () => {
+                    this.loadData();
+                });
+
+                document.getElementById('exportBtn').addEventListener('click', () => {
+                    this.exportData();
+                });
+
+                document.getElementById('applyFilters')?.addEventListener('click', () => {
+                    this.applyTradeFilters();
+                });
+
+                document.getElementById('clearFilters')?.addEventListener('click', () => {
+                    this.clearTradeFilters();
+                });
+
+                document.getElementById('applyLogFilters')?.addEventListener('click', () => {
+                    this.applyLogFilters();
+                });
+
+                document.getElementById('clearLogFilters')?.addEventListener('click', () => {
+                    this.clearLogFilters();
+                });
+
+                document.getElementById('autoRefresh')?.addEventListener('change', (e) => {
+                    this.setAutoRefresh(e.target.value);
+                });
+            }
+
+            setupTabs() {
+                const tabs = document.querySelectorAll('.nav-tab');
+                const tabContents = document.querySelectorAll('.tab-content');
+
+                tabs.forEach(tab => {
+                    tab.addEventListener('click', () => {
+                        tabs.forEach(t => t.classList.remove('active'));
+                        tabContents.forEach(tc => tc.classList.remove('active'));
+
+                        tab.classList.add('active');
+                        const tabId = tab.dataset.tab;
+                        document.getElementById(tabId).classList.add('active');
+                    });
+                });
+            }
+
+            async loadData() {
+                try {
+                    const response = await fetch('/api/dashboard');
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    
+                    const result = await response.json();
+                    if (result.status === 'success') {
+                        this.data = result.data;
+                        this.updateUI();
+                        this.updateLastUpdate();
+                    }
+                } catch (error) {
+                    console.error('Failed to load data:', error);
+                    this.showError('Failed to load dashboard data');
+                }
+            }
+
+            updateUI() {
+                if (!this.data) return;
+                
+                this.updatePortfolioSummary();
+                this.updateRecentTrades();
+                this.updateTradesTable();
+                this.updateLogsTable();
+                this.updateStrategiesSection();
+                this.updateMarketStatus();
+                this.updateCharts();
+            }
+
+            updatePortfolioSummary() {
+                const portfolio = this.data.portfolio;
+                const summary = this.data.summary;
+
+                document.getElementById('portfolioValue').textContent = this.formatCurrency(portfolio.totalValue);
+                document.getElementById('portfolioChange').textContent = 
+                    `${this.formatCurrency(portfolio.dayChange, true)} (${portfolio.dayChange >= 0 ? '+' : ''}${((portfolio.dayChange / portfolio.totalValue) * 100).toFixed(2)}%)`;
+                document.getElementById('portfolioChange').className = `summary-change ${portfolio.dayChange >= 0 ? 'positive' : 'negative'}`;
+
+                document.getElementById('dailyPnL').textContent = this.formatCurrency(portfolio.dayChange, true);
+                document.getElementById('dailyReturn').textContent = `${portfolio.dayChange >= 0 ? '+' : ''}${((portfolio.dayChange / portfolio.totalValue) * 100).toFixed(2)}%`;
+
+                document.getElementById('activePositions').textContent = summary.activeTrades;
+                document.getElementById('positionsChange').textContent = `${portfolio.positions.length} symbols`;
+
+                document.getElementById('winRate').textContent = `${summary.winRate}%`;
+                document.getElementById('totalTrades').textContent = `${summary.totalTrades} trades`;
+            }
+
+            updateRecentTrades() {
+                const tbody = document.getElementById('recentTradesTable');
+                tbody.innerHTML = '';
+
+                this.data.trades.slice(0, 5).forEach(trade => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${this.formatTime(trade.timestamp)}</td>
+                        <td><strong>${trade.symbol}</strong></td>
+                        <td><span class="badge ${trade.side === 'BUY' ? 'badge-success' : 'badge-error'}">${trade.side}</span></td>
+                        <td>${trade.quantity}</td>
+                        <td>${this.formatCurrency(trade.price)}</td>
+                        <td>${trade.strategy}</td>
+                        <td><span class="badge ${this.getStatusBadgeClass(trade.status)}">${trade.status}</span></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+
+            updateTradesTable() {
+                const tbody = document.getElementById('tradesTable');
+                if (!tbody) return;
+                
+                tbody.innerHTML = '';
+
+                this.data.trades.forEach(trade => {
+                    const row = document.createElement('tr');
+                    const value = trade.quantity * trade.price;
+                    
+                    row.innerHTML = `
+                        <td>${this.formatDateTime(trade.timestamp)}</td>
+                        <td><strong>${trade.symbol}</strong></td>
+                        <td><span class="badge ${trade.side === 'BUY' ? 'badge-success' : 'badge-error'}">${trade.side}</span></td>
+                        <td>${trade.quantity}</td>
+                        <td>${this.formatCurrency(trade.price)}</td>
+                        <td>${this.formatCurrency(value)}</td>
+                        <td>${trade.strategy}</td>
+                        <td>${trade.orderId || '--'}</td>
+                        <td><span class="badge ${this.getStatusBadgeClass(trade.status)}">${trade.status}</span></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+
+            updateLogsTable() {
+                const tbody = document.getElementById('logsTable');
+                if (!tbody) return;
+                
+                tbody.innerHTML = '';
+
+                this.data.logs.forEach(log => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${this.formatDateTime(log.timestamp)}</td>
+                        <td><span class="badge ${this.getLogLevelBadgeClass(log.level)}">${log.level}</span></td>
+                        <td>${log.context}</td>
+                        <td>${log.message}</td>
+                        <td>${log.strategy || '--'}</td>
+                        <td>${log.symbol || '--'}</td>
+                        <td><button class="btn btn--secondary" onclick="alert('Log details: ' + JSON.stringify(${JSON.stringify(log.data)}))">View</button></td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+
+            updateStrategiesSection() {
+                const performanceDiv = document.getElementById('strategyPerformance');
+                const statusDiv = document.getElementById('strategyStatus');
+
+                if (!performanceDiv || !statusDiv) return;
+
+                performanceDiv.innerHTML = '';
+                statusDiv.innerHTML = '';
+
+                // Mock strategy data since it's not in the current API response
+                const strategies = [
+                    { name: "SPY_Momentum", enabled: true, performance: { winRate: 65.5, totalReturn: 12.3, tradesCount: 23 } },
+                    { name: "QQQ_Momentum", enabled: true, performance: { winRate: 58.2, totalReturn: 8.7, tradesCount: 31 } },
+                    { name: "SPY_RegimeDetection", enabled: true, performance: { winRate: 72.1, totalReturn: 15.8, tradesCount: 18 } }
+                ];
+
+                strategies.forEach(strategy => {
+                    const perfCard = document.createElement('div');
+                    perfCard.className = 'summary-card';
+                    perfCard.style.marginBottom = '1rem';
+                    perfCard.innerHTML = `
+                        <div class="summary-header">
+                            <h4 class="summary-title">${strategy.name}</h4>
+                            <span class="badge ${strategy.enabled ? 'badge-success' : 'badge-error'}">
+                                ${strategy.enabled ? 'ACTIVE' : 'DISABLED'}
+                            </span>
+                        </div>
+                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; margin-top: 1rem;">
+                            <div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">Win Rate</div>
+                                <div style="font-weight: 600;">${strategy.performance.winRate}%</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">Return</div>
+                                <div style="font-weight: 600;">${strategy.performance.totalReturn}%</div>
+                            </div>
+                            <div>
+                                <div style="font-size: 0.75rem; color: var(--text-muted);">Trades</div>
+                                <div style="font-weight: 600;">${strategy.performance.tradesCount}</div>
+                            </div>
+                        </div>
+                    `;
+                    performanceDiv.appendChild(perfCard);
+
+                    const statusCard = document.createElement('div');
+                    statusCard.style.padding = '1rem';
+                    statusCard.style.borderLeft = `4px solid ${strategy.enabled ? 'var(--success-color)' : 'var(--error-color)'}`;
+                    statusCard.style.marginBottom = '1rem';
+                    statusCard.innerHTML = `
+                        <div style="display: flex; justify-content: between; align-items: center;">
+                            <div>
+                                <div style="font-weight: 600; margin-bottom: 0.25rem;">${strategy.name}</div>
+                                <div style="font-size: 0.875rem; color: var(--text-muted);">
+                                    ${strategy.enabled ? 'Active and monitoring signals' : 'Currently disabled'}
+                                </div>
+                            </div>
+                            <span class="badge ${strategy.enabled ? 'badge-success' : 'badge-error'}">
+                                ${strategy.enabled ? 'ON' : 'OFF'}
+                            </span>
+                        </div>
+                    `;
+                    statusDiv.appendChild(statusCard);
+                });
+            }
+
+            updateMarketStatus() {
+                const indicator = document.getElementById('marketIndicator');
+                const statusText = document.getElementById('marketStatusText');
+                const isOpen = this.data.marketStatus?.isOpen || false;
+
+                indicator.className = `status-indicator ${isOpen ? 'open' : ''}`;
+                statusText.textContent = isOpen ? 'Market Open' : 'Market Closed';
+            }
+
+            setupCharts() {
+                this.createPerformanceChart();
+                this.createStrategyChart();
+                this.createEquityCurveChart();
+                this.createDailyReturnsChart();
+            }
+
+            createPerformanceChart() {
+                const ctx = document.getElementById('performanceChart');
+                if (!ctx) return;
+                
+                this.charts.performance = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: this.data?.performance?.map(p => this.formatDate(p.timestamp)) || [],
+                        datasets: [{
+                            label: 'Portfolio Value',
+                            data: this.data?.performance?.map(p => p.totalEquity) || [],
+                            borderColor: 'rgb(31, 184, 205)',
+                            backgroundColor: 'rgba(31, 184, 205, 0.1)',
+                            borderWidth: 2,
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        },
+                        scales: {
+                            y: {
+                                beginAtZero: false,
+                                ticks: {
+                                    callback: function(value) {
+                                        return '$' + value.toLocaleString();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+
+            createStrategyChart() {
+                const ctx = document.getElementById('strategyChart');
+                if (!ctx) return;
+                
+                this.charts.strategy = new Chart(ctx, {
+                    type: 'doughnut',
+                    data: {
+                        labels: ['SPY Strategies', 'QQQ Strategies', 'Other'],
+                        datasets: [{
+                            data: [45, 35, 20],
+                            backgroundColor: [
+                                'rgba(34, 197, 94, 0.8)',
+                                'rgba(59, 130, 246, 0.8)', 
+                                'rgba(249, 115, 22, 0.8)'
+                            ]
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: {
+                                position: 'bottom'
+                            }
+                        }
+                    }
+                });
+            }
+
+            createEquityCurveChart() {
+                const ctx = document.getElementById('equityCurveChart');
+                if (!ctx) return;
+                
+                this.charts.equityCurve = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: this.data?.performance?.map(p => this.formatDate(p.timestamp)) || [],
+                        datasets: [{
+                            label: 'Equity',
+                            data: this.data?.performance?.map(p => p.totalEquity) || [],
+                            borderColor: 'rgb(34, 197, 94)',
+                            backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                            borderWidth: 2,
+                            fill: true
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+            }
+
+            createDailyReturnsChart() {
+                const ctx = document.getElementById('dailyReturnsChart');
+                if (!ctx) return;
+                
+                this.charts.dailyReturns = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: this.data?.performance?.map(p => this.formatDate(p.timestamp)) || [],
+                        datasets: [{
+                            label: 'Daily Return %',
+                            data: this.data?.performance?.map(p => p.dailyReturn) || [],
+                            backgroundColor: this.data?.performance?.map(p => 
+                                (p.dailyReturn || 0) >= 0 ? 'rgba(34, 197, 94, 0.8)' : 'rgba(239, 68, 68, 0.8)'
+                            ) || []
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        plugins: {
+                            legend: { display: false }
+                        }
+                    }
+                });
+            }
+
+            updateCharts() {
+                Object.values(this.charts).forEach(chart => {
+                    if (chart) chart.update();
+                });
+            }
+
+            // Utility Methods
+            formatCurrency(amount, showSign = false) {
+                const formatted = new Intl.NumberFormat('en-US', {
+                    style: 'currency',
+                    currency: 'USD',
+                    minimumFractionDigits: 2
+                }).format(Math.abs(amount || 0));
+
+                if (showSign && amount !== 0) {
+                    return amount >= 0 ? '+' + formatted : '-' + formatted;
+                }
+                return formatted;
+            }
+
+            formatTime(timestamp) {
+                return new Date(timestamp).toLocaleTimeString('en-US', {
+                    hour12: false,
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+
+            formatDate(timestamp) {
+                return new Date(timestamp).toLocaleDateString('en-US', {
+                    month: 'short',
+                    day: 'numeric'
+                });
+            }
+
+            formatDateTime(timestamp) {
+                return new Date(timestamp).toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+            }
+
+            getStatusBadgeClass(status) {
+                if (!status) return 'badge-info';
+                switch (status.toUpperCase()) {
+                    case 'FILLED': return 'badge-success';
+                    case 'PENDING': return 'badge-warning';
+                    case 'CANCELLED': return 'badge-error';
+                    default: return 'badge-info';
+                }
+            }
+
+            getLogLevelBadgeClass(level) {
+                if (!level) return 'badge-info';
+                switch (level.toUpperCase()) {
+                    case 'SUCCESS': return 'badge-success';
+                    case 'INFO': return 'badge-info';
+                    case 'WARNING': return 'badge-warning';
+                    case 'ERROR': return 'badge-error';
+                    default: return 'badge-info';
+                }
+            }
+
+            updateLastUpdate() {
+                document.getElementById('lastUpdate').textContent = new Date().toLocaleTimeString();
+            }
+
+            showError(message) {
+                console.error(message);
+                // You could add a notification system here
+            }
+
+            startAutoRefresh() {
+                this.setAutoRefresh('30');
+            }
+
+            setAutoRefresh(seconds) {
+                if (this.autoRefreshInterval) {
+                    clearInterval(this.autoRefreshInterval);
+                }
+
+                if (seconds !== 'off') {
+                    this.autoRefreshInterval = setInterval(() => {
+                        this.loadData();
+                    }, parseInt(seconds) * 1000);
+                }
+            }
+
+            exportData() {
+                const dataToExport = {
+                    trades: this.data?.trades || [],
+                    performance: this.data?.performance || [],
+                    logs: this.data?.logs || []
+                };
+
+                const dataStr = JSON.stringify(dataToExport, null, 2);
+                const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
+                
+                const exportFileDefaultName = `trading-data-${new Date().toISOString().split('T')[0]}.json`;
+                
+                const linkElement = document.createElement('a');
+                linkElement.setAttribute('href', dataUri);
+                linkElement.setAttribute('download', exportFileDefaultName);
+                linkElement.click();
+            }
+
+            // Filter methods
+            applyTradeFilters() {
+                console.log('Applying trade filters...');
+            }
+
+            clearTradeFilters() {
+                console.log('Clearing trade filters...');
+                document.getElementById('dateFrom').value = '';
+                document.getElementById('dateTo').value = '';
+                document.getElementById('strategyFilter').value = '';
+                document.getElementById('symbolFilter').value = '';
+            }
+
+            applyLogFilters() {
+                console.log('Applying log filters...');
+            }
+
+            clearLogFilters() {
+                console.log('Clearing log filters...');
+                document.getElementById('logLevelFilter').value = '';
+                document.getElementById('logStrategyFilter').value = '';
+                document.getElementById('logSearch').value = '';
+            }
+        }
+
+        // Initialize dashboard when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new TradingDashboard();
+        });
+    </script>
+</body>
+</html>

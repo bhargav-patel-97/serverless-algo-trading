@@ -1,6 +1,5 @@
-// Enhanced api/trade.js - Now with Take Profit/Stop Loss Position Monitoring
+// Enhanced api/trade.js - Now with Google Sheets Logging Integration
 // Integrates PositionExitManager for comprehensive position management
-
 import { AlpacaHybridApi } from '../lib/brokers/alpacaHybrid.js';
 import { MomentumStrategy } from '../lib/strategies/momentum.js';
 import { MeanReversionStrategy } from '../lib/strategies/meanReversion.js';
@@ -9,11 +8,14 @@ import { RiskManager } from '../lib/utils/riskManager.js';
 import { Logger } from '../lib/utils/logger.js';
 import { GoogleSheetsLogger } from '../lib/utils/googleSheets.js';
 import TradingPositionManager from '../lib/TradingPositionManager.js';
-import { PositionExitManager } from '../lib/PositionExitManager.js'; // NEW
+import { PositionExitManager } from '../lib/PositionExitManager.js';
 
 export default async function handler(req, res) {
   const logger = new Logger();
   const sheetsLogger = new GoogleSheetsLogger();
+  
+  // NEW: Connect logger to sheets logger for persistent logging
+  logger.setSheetsLogger(sheetsLogger);
 
   try {
     logger.info('Enhanced Trading System with TP/SL Position Monitoring initiated', {
@@ -28,8 +30,8 @@ export default async function handler(req, res) {
       keyId: process.env.ALPACA_API_KEY,
       secretKey: process.env.ALPACA_SECRET_KEY,
       paper: process.env.ALPACA_PAPER === 'true',
-      baseUrl: process.env.ALPACA_PAPER === 'true' ?
-        'https://paper-api.alpaca.markets' :
+      baseUrl: process.env.ALPACA_PAPER === 'true' ? 
+        'https://paper-api.alpaca.markets' : 
         'https://api.alpaca.markets'
     });
 
@@ -41,7 +43,7 @@ export default async function handler(req, res) {
       logger: logger
     });
 
-    // NEW: Initialize Position Exit Manager for TP/SL monitoring
+    // Initialize Position Exit Manager for TP/SL monitoring
     const exitManager = new PositionExitManager(alpaca, {
       enableLogging: true,
       logger: logger,
@@ -135,19 +137,19 @@ export default async function handler(req, res) {
     // Get current account info
     const account = await alpaca.getAccount();
     const currentEquity = parseFloat(account.equity);
-
+    
     logger.info('Account info retrieved', {
       equity: currentEquity,
       buyingPower: account.buying_power
     });
 
-    // ======================================
-    // NEW: POSITION EXIT MONITORING PHASE
-    // ======================================
+    // ===========================================
+    // PHASE 1: POSITION EXIT MONITORING
+    // ===========================================
     logger.info('Phase 1: Monitoring existing positions for TP/SL exits');
-
+    
     const exitResults = await exitManager.monitorAndExecuteExits();
-
+    
     if (exitResults.exitOrdersExecuted > 0) {
       logger.info('Position exits executed', {
         exitOrdersExecuted: exitResults.exitOrdersExecuted,
@@ -167,15 +169,15 @@ export default async function handler(req, res) {
       }
     }
 
-    // =======================================
-    // EXISTING: NEW TRADE SIGNALS PHASE
-    // =======================================
+    // ===========================================
+    // PHASE 2: NEW TRADE SIGNALS PROCESSING
+    // ===========================================
     logger.info('Phase 2: Processing new trade signals');
 
     // Get current positions with position manager
     const currentPositions = await positionManager.getCurrentPositions();
     const positions = await alpaca.getPositions();
-
+    
     logger.info('Position status after exits', {
       totalPositions: currentPositions.size,
       symbols: Array.from(currentPositions.keys())
@@ -184,7 +186,10 @@ export default async function handler(req, res) {
     // Check daily loss limit
     if (await riskManager.isDailyLossLimitExceeded(account, positions)) {
       logger.warning('Daily loss limit exceeded, skipping new trades');
-
+      
+      // Force flush logs before returning
+      await logger.forceFlush();
+      
       return res.json({
         status: 'success',
         phase1_exits: exitResults,
@@ -204,19 +209,20 @@ export default async function handler(req, res) {
       if (strategy.isEnabled()) {
         try {
           logger.info(`Executing strategy: ${strategy.getName()}`);
+          
           const signals = await strategy.generateSignals(alpaca);
 
           // Categorize signals by base symbol for better tracking
           const baseSymbol = (strategy.config && strategy.config.baseSymbol) ||
             (strategy.options && strategy.options.baseSymbol) ||
             'SPY';
-
+          
           signalsByBaseSymbol[baseSymbol] = signalsByBaseSymbol[baseSymbol] || [];
 
           for (const signal of signals) {
             // Apply risk management (includes TP/SL calculation)
             const adjustedSignal = await riskManager.adjustSignal(signal, account, positions);
-
+            
             if (adjustedSignal && adjustedSignal.quantity > 0) {
               const quantity = Math.floor(adjustedSignal.quantity);
               const currentPrice = adjustedSignal.currentPrice;
@@ -225,10 +231,12 @@ export default async function handler(req, res) {
               // Check for open position in the same symbol
               const openPosition = currentPositions.get(adjustedSignal.symbol);
               let allowTrade = true;
+
               if (openPosition) {
                 // Get last signal strength for this symbol/side from Google Sheets
                 const lastStrength = await sheetsLogger.getLastSignalStrength(adjustedSignal.symbol, adjustedSignal.side);
                 const newStrength = adjustedSignal.confidence != null ? adjustedSignal.confidence : (adjustedSignal.signalStrength != null ? adjustedSignal.signalStrength : null);
+
                 if (lastStrength != null && newStrength != null) {
                   // Only allow if new signal is at least 30% stronger than last
                   if (newStrength <= lastStrength * 1.3) {
@@ -247,6 +255,7 @@ export default async function handler(req, res) {
                   });
                 }
               }
+
               if (!allowTrade) {
                 const duplicateTrade = {
                   symbol: adjustedSignal.symbol,
@@ -261,6 +270,7 @@ export default async function handler(req, res) {
                 tradingResults.push(duplicateTrade);
                 continue;
               }
+
               // Log signal strength for this trade
               await sheetsLogger.logSignalStrength({
                 timestamp: new Date().toISOString(),
@@ -270,7 +280,6 @@ export default async function handler(req, res) {
                 signalStrength: adjustedSignal.confidence != null ? adjustedSignal.confidence : (adjustedSignal.signalStrength != null ? adjustedSignal.signalStrength : null),
                 orderId: null // Will be updated after trade if needed
               });
-              // --- END ENHANCEMENT ---
 
               // Enhanced validation with position manager
               const validation = await positionManager.validateTradeBeforeExecution(
@@ -300,12 +309,11 @@ export default async function handler(req, res) {
                   timestamp: new Date().toISOString(),
                   baseSymbol: baseSymbol
                 };
-
                 tradingResults.push(skippedTrade);
                 continue;
               }
 
-              // FIXED: Execute trade with TP/SL storage capability using correct method name
+              // Execute trade with TP/SL storage capability
               const tradeResult = await executeTradeWithTPSLStorage(
                 positionManager,
                 adjustedSignal,
@@ -327,7 +335,7 @@ export default async function handler(req, res) {
                   takeProfit: adjustedSignal.takeProfit,
                   status: 'executed',
                   baseSymbol: baseSymbol,
-                  exitLevelsStored: true, // NEW: Indicates TP/SL levels are stored
+                  exitLevelsStored: true,
                   validation: {
                     exposureCheck: validation.checks.exposure?.action || 'proceed',
                     riskLimits: validation.checks.riskLimits?.withinLimits || true
@@ -340,7 +348,7 @@ export default async function handler(req, res) {
                 // Log to Google Sheets
                 await sheetsLogger.logTrade({
                   ...enhancedTradeResult,
-                  type: 'entry' // NEW: Distinguish between entry and exit trades
+                  type: 'entry'
                 });
 
                 // After successful trade, update signal strength log with orderId
@@ -354,7 +362,6 @@ export default async function handler(req, res) {
                 });
 
                 logger.success('Trade executed successfully with TP/SL storage', enhancedTradeResult);
-
               } else {
                 // Handle failed or skipped trades
                 const failedTrade = {
@@ -367,12 +374,10 @@ export default async function handler(req, res) {
                   timestamp: new Date().toISOString(),
                   baseSymbol: baseSymbol
                 };
-
                 tradingResults.push(failedTrade);
                 await sheetsLogger.logTrade(failedTrade);
                 logger.warning('Trade execution failed or skipped', failedTrade);
               }
-
             } else {
               logger.info('Signal filtered out by risk management', {
                 originalSignal: signal,
@@ -389,10 +394,10 @@ export default async function handler(req, res) {
       }
     }
 
-    // FIXED: Get comprehensive position summary using correct method name
+    // Get comprehensive position summary
     const positionSummary = await positionManager.getEnhancedPositionSummary();
 
-    // NEW: Get exit monitoring status
+    // Get exit monitoring status
     const exitMonitoringStatus = await exitManager.getMonitoringStatus();
 
     // Log system performance with enhanced metrics
@@ -407,10 +412,12 @@ export default async function handler(req, res) {
 
     await sheetsLogger.logPerformance(performanceMetrics);
 
+    // NEW: Force flush any remaining logs to Google Sheets
+    await logger.forceFlush();
+
     // Enhanced response with both exit and entry trade data
     const response = {
       status: 'success',
-
       // Phase 1: Exit monitoring results
       exitMonitoring: {
         positionsMonitored: exitResults.positionsMonitored,
@@ -420,7 +427,6 @@ export default async function handler(req, res) {
         exitTrades: exitResults.exitTrades,
         errors: exitResults.errors
       },
-
       // Phase 2: New trade execution results
       newTrades: {
         tradesExecuted: tradingResults.filter(t => t.status === 'executed').length,
@@ -432,12 +438,10 @@ export default async function handler(req, res) {
           QQQ_signals: signalsByBaseSymbol.QQQ.length
         }
       },
-
       // Enhanced position and monitoring status
       positionSummary: positionSummary,
       exitMonitoringStatus: exitMonitoringStatus,
       performanceMetrics: performanceMetrics,
-
       cooldownStatus: {
         allCooldowns: positionManager.getAllCooldowns ? positionManager.getAllCooldowns() : {},
         symbolSpecific: Array.from(currentPositions.keys()).reduce((status, symbol) => {
@@ -449,7 +453,12 @@ export default async function handler(req, res) {
           return status;
         }, {})
       },
-
+      // NEW: Logging summary
+      loggingSummary: {
+        totalLogEntries: logger.logBuffer?.length || 0,
+        sheetsEnabled: sheetsLogger.enabled,
+        lastFlush: new Date().toISOString()
+      },
       timestamp: new Date().toISOString()
     };
 
@@ -471,6 +480,13 @@ export default async function handler(req, res) {
       stack: error.stack
     });
 
+    // Force flush logs even on error
+    try {
+      await logger.forceFlush();
+    } catch (flushError) {
+      console.error('Failed to flush logs on error:', flushError.message);
+    }
+
     return res.status(500).json({
       status: 'error',
       message: error.message,
@@ -480,7 +496,7 @@ export default async function handler(req, res) {
 }
 
 /**
- * FIXED: Helper function to execute trade with TP/SL storage using correct method name
+ * Helper function to execute trade with TP/SL storage
  * @param {Object} positionManager - Trading position manager
  * @param {Object} adjustedSignal - Risk-adjusted signal
  * @param {number} quantity - Trade quantity
@@ -496,7 +512,7 @@ async function executeTradeWithTPSLStorage(positionManager, adjustedSignal, quan
       takeProfit: adjustedSignal.takeProfit || null
     };
 
-    // FIXED: Call the correct method name from TradingPositionManager
+    // Call the correct method name from TradingPositionManager
     const tradeResult = await positionManager.executeTradeWithTPSL(
       adjustedSignal.symbol,
       adjustedSignal.side,
@@ -508,7 +524,6 @@ async function executeTradeWithTPSLStorage(positionManager, adjustedSignal, quan
     );
 
     return tradeResult;
-
   } catch (error) {
     return {
       success: false,
