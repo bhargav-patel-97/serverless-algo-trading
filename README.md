@@ -1,241 +1,196 @@
+# Serverless Algo Trading — a refined, purposeful design
 
-# Serverless Algorithmic Trading System
+> A surgical approach to algorithmic trading: small surface area, precise intent, and beautiful simplicity.
 
-A sophisticated algorithmic trading system built for Vercel serverless functions, designed to trade leveraged ETFs using proven quantitative strategies.
+[![Deploy (Vercel)](https://img.shields.io/badge/deploy-vercel-black?logo=vercel)](https://vercel.com)
+[![License: MIT](https://img.shields.io/badge/license-MIT-brightgreen.svg)](./LICENSE)
+[![Node >=18](https://img.shields.io/badge/node-%3E%3D18-brightgreen.svg)](https://nodejs.org/)
+[![Alpaca](https://img.shields.io/badge/broker-Alpaca-ff69b4.svg)](https://alpaca.markets/)
+[![Serverless](https://img.shields.io/badge/architecture-serverless-blue.svg)](https://vercel.com/docs)
 
-## Features
+---
 
-### 🚀 **Multiple Trading Strategies**
-- **Momentum Strategy**: Moving average crossovers with trend following
-- **Mean Reversion**: RSI-based oversold/overbought trading  
-- **Regime Detection**: Bull/bear market identification using SPY 200-day MA
+This repository contains a **serverless algorithmic trading platform** designed to run as compact serverless functions on Vercel. It executes small, auditable quantitative strategies against tradable instruments, logs every decision to Google Sheets, and exposes a concise API for execution, reporting and backtests.
 
-### 🛡️ **Comprehensive Risk Management**
-- Position sizing based on account equity and volatility
-- Stop-loss and take-profit automation
-- Daily loss limits and maximum drawdown protection
-- Concurrent position limits
+---
 
-### 📊 **Real-time Monitoring & Logging**
-- Google Sheets integration for trade and performance logging
-- Structured JSON logging for debugging and analysis
-- Real-time portfolio tracking and performance metrics
+# Why this exists
 
-### ⚡ **Serverless Architecture**
-- Deployed on Vercel serverless functions
-- Scalable and cost-effective
-- Zero infrastructure management
+Because trading systems should do three things well: *decide*, *execute*, *protect*.
+This project concentrates those three responsibilities into a tiny, auditable surface that runs with minimal operational overhead and fast iteration.
 
-## Quick Start
+---
 
-### 1. Clone and Setup
+# What it is (at a glance)
+
+* Strategy modules: **Momentum**, **Mean-Reversion (RSI)**, **Regime Detection (200-day MA)** — each as a composable signal producer.
+* Risk controls: position sizing by equity/volatility, stop-loss / take-profit automation, daily loss limits, concurrent position caps.
+* Broker integration: **Alpaca** trading API (paper & live modes supported).
+* Persistent logging: structured trade & performance logs written to **Google Sheets** via a service account.
+* Serverless-first: deploy on Vercel; functions are compact, fast and cost-effective.
+
+---
+
+# Preview (sample screenshots)
+
+> Add the following images under `docs/screenshots/` or `assets/` before committing to show them on GitHub.
+
+![Dashboard preview](docs/screenshots/dashboard.png)
+*Dashboard — status, open positions, and quick-run controls.*
+
+![Trade log preview](docs/screenshots/trade-log.png)
+*Trade log written to Google Sheets — each row is a structured event.*
+
+---
+
+# Quick start
+
 ```bash
-git clone <your-repo>
+# clone
+git clone https://github.com/bhargav-patel-97/serverless-algo-trading.git
 cd serverless-algo-trading
 npm install
 ```
 
-### 2. Configure Environment Variables
-Copy `.env.example` to `.env.local` and fill in your credentials:
+Create a `.env.local` (or configure in Vercel Dashboard) with the variables below.
 
-```bash
-# Alpaca Trading API (Get from https://app.alpaca.markets/)
+```env
+# Alpaca
 ALPACA_API_KEY=your_key_here
 ALPACA_SECRET_KEY=your_secret_here
 ALPACA_PAPER=true
 
-# Google Sheets API (Create service account)
+# Google Sheets service account (values taken from your service account JSON)
 GOOGLE_CLIENT_EMAIL=service-account@project.iam.gserviceaccount.com
-GOOGLE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----...
+GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n"
 GOOGLE_SPREADSHEET_ID=your_spreadsheet_id
+
+# Optional operation flags
+TRADE_ENABLED=true
+LOGGING_ENABLED=true
 ```
 
-### 3. Deploy to Vercel
+Run locally (recommended: `vercel dev` if you use Vercel CLI, otherwise use a local server shim):
+
 ```bash
-npm run deploy
-```
+# with Vercel CLI
+vercel dev
 
-### 4. Set up Automated Execution
-Configure a cron job or webhook to call your `/api/trade` endpoint:
-```bash
-# Example: Every 30 minutes during market hours
-curl -X POST https://your-app.vercel.app/api/trade
-```
-
-## Trading Strategies
-
-### Momentum Strategy
-- **Signal Generation**: 20-day MA crossing above/below 50-day MA on SPY
-- **Execution**: Buy TQQQ on bullish crossover, SQQQ on bearish crossover
-- **Risk**: 2% of portfolio per position
-- **Best For**: Trending markets with clear directional momentum
-
-### Mean Reversion Strategy  
-- **Signal Generation**: RSI below 30 (oversold) or above 70 (overbought)
-- **Execution**: Buy TQQQ when oversold, SQQQ when overbought
-- **Risk**: 1.5% of portfolio per position
-- **Best For**: Range-bound, oscillating markets
-
-### Regime Detection Strategy
-- **Signal Generation**: SPY price vs 200-day moving average
-- **Execution**: TQQQ in bull markets, SQQQ in bear markets
-- **Risk**: 3% of portfolio per position  
-- **Best For**: Long-term trend identification and positioning
-
-## Risk Management
-
-The system implements multiple layers of risk control:
-
-### Position Sizing
-```javascript
-// 1% risk per trade with 3% stop loss
-const riskAmount = accountEquity * 0.01;
-const positionSize = riskAmount / (entryPrice * 0.03);
-```
-
-### Daily Loss Limits
-- Maximum 2% daily loss before trading halts
-- Real-time P&L monitoring and position tracking
-
-### Stop Loss & Take Profit
-- Automatic stop loss at 3% below entry
-- Take profit target at 6% above entry (2:1 reward/risk ratio)
-
-### Portfolio Limits
-- Maximum 5% in any single position
-- Maximum 5 concurrent positions
-- Minimum $100 position size
-
-## Leveraged ETF Selection
-
-The system focuses on liquid, high-volume leveraged ETFs:
-
-| Symbol | Description | Leverage | Underlying |
-|--------|-------------|----------|------------|
-| TQQQ   | 3x Nasdaq Bull | 3x | QQQ |
-| SQQQ   | 3x Nasdaq Bear | -3x | QQQ |
-| UPRO   | 3x S&P Bull | 3x | SPY |
-| SPXU   | 3x S&P Bear | -3x | SPY |
-
-**Why Leveraged ETFs?**
-- Amplified returns from small price movements
-- Lower capital requirements for significant exposure  
-- Built-in daily rebalancing reduces volatility decay concerns for short-term trades
-
-## API Endpoints
-
-### `POST /api/trade`
-Main trading execution endpoint. Runs all enabled strategies and executes trades.
-
-**Response:**
-```json
-{
-  "status": "success",
-  "tradesExecuted": 2,
-  "trades": [...],
-  "performanceMetrics": {...},
-  "timestamp": "2025-09-23T09:47:12Z"
-}
-```
-
-### `GET /api/portfolio`
-Returns current portfolio status and positions.
-
-### `GET /api/logs`
-Retrieves recent trading logs and system status.
-
-### `POST /api/backtest`
-Runs historical backtesting on specified strategies and time periods.
-
-## Performance Monitoring
-
-### Google Sheets Integration
-Automatically logs:
-- **Trades Sheet**: All buy/sell orders with timestamps, prices, and P&L
-- **Performance Sheet**: Daily equity, returns, and risk metrics
-
-### Key Metrics Tracked
-- Total return and daily P&L
-- Sharpe ratio and maximum drawdown
-- Win rate and average trade duration
-- Risk-adjusted returns
-
-## Development and Testing
-
-### Local Development
-```bash
+# or run the API handlers directly (project specific scripts may exist)
 npm run dev
-# Access at http://localhost:3000
 ```
 
-### Testing Strategies
+Deploy to production:
+
 ```bash
-# Run backtest on historical data
-curl -X POST http://localhost:3000/api/backtest \
+vercel --prod
+```
+
+---
+
+# API reference
+
+A compact table summarizing the public endpoints in `/api`.
+
+| Endpoint         | Method | Auth          | Description                                                           | Body (example)                                             | Response (example)                          |
+| ---------------- | -----: | ------------- | --------------------------------------------------------------------- | ---------------------------------------------------------- | ------------------------------------------- |
+| `/api/trade`     | `POST` | API key / env | Run enabled strategies, evaluate risk, place orders, and log results. | `{ "mode":"paper" }`                                       | `{ "status":"success","tradesExecuted":2 }` |
+| `/api/portfolio` |  `GET` | API key / env | Snapshot of current positions & unrealized P&L.                       | —                                                          | `{ "positions":[], "equity":10000 }`        |
+| `/api/logs`      |  `GET` | API key / env | Recent logs and structured trade history (paginated).                 | `?limit=50`                                                | `{ "logs":[ ... ] }`                        |
+| `/api/backtest`  | `POST` | API key / env | Run a historical backtest against provided date-range & symbol set.   | `{ "symbol":"SPY","from":"2020-01-01","to":"2024-12-31" }` | `{ "summary":{...}, "trades":[...] }`       |
+| `/api/health`    |  `GET` | none          | Lightweight healthcheck for uptime monitoring.                        | —                                                          | `{ "status":"ok","time":"..." }`            |
+
+### Example — run a trade (curl)
+
+```bash
+curl -X POST https://your-deployment.vercel.app/api/trade \
   -H "Content-Type: application/json" \
-  -d '{"strategy": "momentum", "start": "2024-01-01", "end": "2024-12-31"}'
+  -d '{"mode":"paper"}'
 ```
 
-### Paper Trading
-Always start with paper trading (ALPACA_PAPER=true) to validate strategies before using real money.
+> When scheduling cron runs during market hours, call `/api/trade` on the cadence your strategy requires (e.g., 1m / 5m / hourly). Prefer paper mode until fully validated.
 
-## Security Best Practices
+---
 
-- Store API keys in Vercel environment variables
-- Use Google service accounts with minimal permissions
-- Enable Alpaca IP whitelisting if available
-- Monitor logs for suspicious activity
-- Set up alerts for unusual trading patterns
+# Architecture (concise)
 
-## Deployment Architecture
+1. **API (serverless)** — single function entrypoints under `/api/*`.
+2. **Strategy library** — pure modules that produce signals (long/short/flat) for target symbols.
+3. **Executor / risk manager** — centralized logic to turn signals into sized orders with stops and limits.
+4. **Integrations** — Alpaca for orders & market data; Google Sheets for persistent logs.
+5. **UI** — minimal static dashboard for status and manual runs.
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│   Cron Job      │───▶│  Vercel         │───▶│   Alpaca API    │
-│   (Trigger)     │    │  Serverless     │    │   (Execution)   │
-└─────────────────┘    │  Function       │    └─────────────────┘
-                       └─────────┬───────┘
-                                 │
-                                 ▼
-                       ┌─────────────────┐
-                       │  Google Sheets  │
-                       │    (Logging)    │
-                       └─────────────────┘
-```
+This architecture keeps cognitive load low and ownership of each concern explicit.
 
-## Troubleshooting
+---
 
-### Common Issues
+# Configuration & customization
 
-**API Connection Errors**
-- Verify Alpaca API keys are correct
-- Check paper vs live trading configuration
-- Ensure IP whitelisting if enabled
+* **Enable / disable strategies** by toggling the strategy list in the executor module.
+* **Risk parameters** live near the top of the executor (position sizing rules, max drawdown, daily loss limits).
+* **Exchangeable broker**: Alpaca is pluggable — implement the same `placeOrder` / `getPositions` primitives to swap brokers.
 
-**Google Sheets Errors** 
-- Verify service account has edit permissions
-- Check private key formatting (escape newlines)
-- Ensure spreadsheet ID is correct
+---
 
-**Strategy Not Executing**
-- Check if strategy is enabled in environment variables
-- Verify minimum data requirements are met
-- Review logs for specific error messages
+# Logging & persistence
 
-### Debug Mode
-Set `LOG_LEVEL=debug` to enable detailed logging for troubleshooting.
+Trade events and performance snapshots are written to a Google Sheet. Use a service account, share the spreadsheet with the service account email, and set `GOOGLE_SPREADSHEET_ID`.
 
-## Contributing
+Consider adding alerting (Slack/Telegram) or a lightweight DB (KV / Postgres) if you require query-able histories beyond what Sheets comfortably supports.
 
-1. Fork the repository
-2. Create a feature branch
-3. Test thoroughly with paper trading
-4. Submit a pull request with detailed description
+---
 
-## Disclaimer
+# Safety checklist (read before enabling LIVE trades)
 
-This software is for educational and research purposes. Trading involves substantial risk of loss. Past performance does not guarantee future results. Always test strategies thoroughly with paper trading before using real money.
+* [ ] Keep `ALPACA_PAPER=true` while testing.
+* [ ] Confirm the Google service account has Editor access to the spreadsheet.
+* [ ] Verify position sizing and daily loss limits are conservative for your account.
+* [ ] Add monitoring for failed orders, rate-limits and API rejections.
+* [ ] Run thorough backtests and paper-forward tests.
 
-## License
+---
 
-MIT License - see LICENSE file for details.
+# Development notes
+
+* Strategy logic is intentionally pure and deterministic for a given market snapshot — design tests around snapshots rather than live streams.
+* Iteration flow: backtest → paper-run → review sheet logs → tweak risk → repeat.
+* The repo includes `vercel.json` to configure function behavior; read it before deploying.
+
+---
+
+# Roadmap
+
+* **Observability** — add dashboards, alerting, and runbook automation.
+* **Strategy plugins** — decouple strategy bundles with versioning and feature flags.
+* **Persisted state** — optional DB for richer analytics and historical queries.
+* **Advanced simulation** — slippage, latency and Monte Carlo-aware backtests.
+
+---
+
+# Contributing
+
+Contributions should be small, documented and testable.
+
+If you add a strategy:
+
+1. Add a pure function that consumes OHLC/indicator snapshots and returns a signal object.
+2. Add deterministic unit tests under `/test` demonstrating behavior on sample snapshots.
+3. Update README with strategy rationale and new risk parameters.
+
+---
+
+# License & contact
+
+MIT — see `LICENSE`.
+
+If you want to collaborate, open an issue or PR. For quick questions, raise an issue with the `question` tag.
+
+---
+
+# A final note (design brief)
+
+This project is intentionally humble in scope: a clear decision surface, strong defaults, and elegant transparency. It aims to do one thing well—trade disciplined strategies while remaining auditable and lightweight.
+
+---
+
+*Ready to commit: place this file at the repository root as `README.md`. Add screenshot images under `docs/screenshots/` or `assets/` to enable the preview images above.*
