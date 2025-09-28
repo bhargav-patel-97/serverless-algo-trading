@@ -1,4 +1,4 @@
-// Enhanced api/trade.js - Now with Persistent TP/SL Position Monitoring
+// Enhanced api/trade.js - Now with Dynamic Symbol Configuration Support
 // Integrates PositionExitManager with enhanced persistent storage for serverless environments
 import { AlpacaHybridApi } from '../lib/brokers/alpacaHybrid.js';
 import { MomentumStrategy } from '../lib/strategies/momentum.js';
@@ -9,14 +9,16 @@ import { Logger } from '../lib/utils/logger.js';
 import { GoogleSheetsLogger } from '../lib/utils/googleSheets.js';
 import TradingPositionManager from '../lib/TradingPositionManager.js';
 import { PositionExitManager } from '../lib/PositionExitManager.js';
+import { SYMBOL_TRIPLETS, getAllBaseSymbols } from '../lib/config/symbolConfig.js';
 
 export default async function handler(req, res) {
   const logger = new Logger();
   const sheetsLogger = new GoogleSheetsLogger();
   
   try {
-    logger.info('Enhanced Trading System with Persistent TP/SL Position Monitoring initiated', {
-      timestamp: new Date().toISOString()
+    logger.info('Enhanced Trading System with Dynamic Symbol Configuration initiated', {
+      timestamp: new Date().toISOString(),
+      configuredSymbols: getAllBaseSymbols()
     });
 
     // Initialize all required Google Sheets
@@ -62,73 +64,8 @@ export default async function handler(req, res) {
       }
     });
 
-    // Enhanced strategies with both SPY and QQQ support
-    const strategies = [
-      // SPY Momentum Strategy
-      new MomentumStrategy({
-        enabled: process.env.SPY_MOMENTUM_ENABLED === 'true',
-        name: 'SPY_Momentum',
-        baseSymbol: 'SPY',
-        symbols: ['UPRO', 'SPXU'], // SPY leveraged ETFs
-        lookbackPeriod: parseInt(process.env.SPY_MOMENTUM_LOOKBACK) || 50,
-        shortMA: parseInt(process.env.SPY_MOMENTUM_SHORT_MA) || 20,
-        longMA: parseInt(process.env.SPY_MOMENTUM_LONG_MA) || 50,
-        positionSize: parseFloat(process.env.SPY_MOMENTUM_POSITION_SIZE) || 0.025
-      }),
-      // QQQ Momentum Strategy
-      new MomentumStrategy({
-        enabled: process.env.QQQ_MOMENTUM_ENABLED === 'true',
-        name: 'QQQ_Momentum',
-        baseSymbol: 'QQQ',
-        symbols: ['TQQQ', 'SQQQ'], // QQQ leveraged ETFs
-        lookbackPeriod: parseInt(process.env.QQQ_MOMENTUM_LOOKBACK) || 50,
-        shortMA: parseInt(process.env.QQQ_MOMENTUM_SHORT_MA) || 20,
-        longMA: parseInt(process.env.QQQ_MOMENTUM_LONG_MA) || 50,
-        positionSize: parseFloat(process.env.QQQ_MOMENTUM_POSITION_SIZE) || 0.02
-      }),
-      // SPY Mean Reversion Strategy
-      new MeanReversionStrategy({
-        enabled: process.env.SPY_MEAN_REVERSION_ENABLED === 'true',
-        name: 'SPY_MeanReversion',
-        baseSymbol: 'SPY',
-        symbols: ['UPRO', 'SPXU'],
-        rsiPeriod: parseInt(process.env.SPY_RSI_PERIOD) || 14,
-        oversoldThreshold: parseInt(process.env.SPY_RSI_OVERSOLD) || 30,
-        overboughtThreshold: parseInt(process.env.SPY_RSI_OVERBOUGHT) || 70,
-        positionSize: parseFloat(process.env.SPY_MEAN_REVERSION_POSITION_SIZE) || 0.02
-      }),
-      // QQQ Mean Reversion Strategy
-      new MeanReversionStrategy({
-        enabled: process.env.QQQ_MEAN_REVERSION_ENABLED === 'true',
-        name: 'QQQ_MeanReversion',
-        baseSymbol: 'QQQ',
-        symbols: ['TQQQ', 'SQQQ'],
-        rsiPeriod: parseInt(process.env.QQQ_RSI_PERIOD) || 14,
-        oversoldThreshold: parseInt(process.env.QQQ_RSI_OVERSOLD) || 30,
-        overboughtThreshold: parseInt(process.env.QQQ_RSI_OVERBOUGHT) || 70,
-        positionSize: parseFloat(process.env.QQQ_MEAN_REVERSION_POSITION_SIZE) || 0.015
-      }),
-      // SPY Regime Detection Strategy
-      new RegimeDetectionStrategy({
-        enabled: process.env.SPY_REGIME_DETECTION_ENABLED === 'true',
-        name: 'SPY_RegimeDetection',
-        baseSymbol: 'SPY',
-        bullSymbol: 'UPRO',
-        bearSymbol: 'SPXU',
-        spyLookback: parseInt(process.env.SPY_REGIME_LOOKBACK) || 200,
-        positionSize: parseFloat(process.env.SPY_REGIME_POSITION_SIZE) || 0.03
-      }),
-      // QQQ Regime Detection Strategy
-      new RegimeDetectionStrategy({
-        enabled: process.env.QQQ_REGIME_DETECTION_ENABLED === 'true',
-        name: 'QQQ_RegimeDetection',
-        baseSymbol: 'QQQ',
-        bullSymbol: 'TQQQ',
-        bearSymbol: 'SQQQ',
-        spyLookback: parseInt(process.env.QQQ_REGIME_LOOKBACK) || 200,
-        positionSize: parseFloat(process.env.QQQ_REGIME_POSITION_SIZE) || 0.025
-      })
-    ];
+    // Generate strategies dynamically from symbol configuration
+    const strategies = generateStrategiesFromConfig();
 
     // Initialize risk manager with enhanced settings
     const riskManager = new RiskManager({
@@ -153,9 +90,9 @@ export default async function handler(req, res) {
     const syncResult = await positionManager.positionStorage.synchronizeWithPersistentStorage();
     logger.info('Position storage synchronization completed', syncResult);
 
-    // ========================================================================
+    // =============================================================================
     // PHASE 1: POSITION EXIT MONITORING (with persistent storage)
-    // ========================================================================
+    // =============================================================================
     logger.info('Phase 1: Monitoring existing positions for TP/SL exits (with persistent storage)');
     const exitResults = await exitManager.monitorAndExecuteExits();
     
@@ -178,9 +115,9 @@ export default async function handler(req, res) {
       }
     }
 
-    // ========================================================================
+    // =============================================================================
     // PHASE 2: NEW TRADE SIGNALS PROCESSING
-    // ========================================================================
+    // =============================================================================
     logger.info('Phase 2: Processing new trade signals');
     
     // Get current positions with position manager
@@ -207,7 +144,12 @@ export default async function handler(req, res) {
     }
 
     const tradingResults = [];
-    const signalsByBaseSymbol = { SPY: [], QQQ: [] };
+    const signalsByBaseSymbol = {};
+    
+    // Initialize signalsByBaseSymbol for all configured symbols
+    getAllBaseSymbols().forEach(symbol => {
+      signalsByBaseSymbol[symbol] = [];
+    });
 
     // Execute each enabled strategy and categorize signals
     for (const strategy of strategies) {
@@ -220,6 +162,7 @@ export default async function handler(req, res) {
           const baseSymbol = (strategy.config && strategy.config.baseSymbol) ||
             (strategy.options && strategy.options.baseSymbol) ||
             'SPY';
+
           signalsByBaseSymbol[baseSymbol] = signalsByBaseSymbol[baseSymbol] || [];
 
           for (const signal of signals) {
@@ -408,8 +351,10 @@ export default async function handler(req, res) {
     // Log system performance with enhanced metrics
     const performanceMetrics = await riskManager.calculatePerformanceMetrics(account, positions);
     performanceMetrics.positionBreakdown = {
-      SPY_based: signalsByBaseSymbol.SPY.length,
-      QQQ_based: signalsByBaseSymbol.QQQ.length,
+      // Create breakdown for all configured symbols
+      ...Object.fromEntries(
+        getAllBaseSymbols().map(symbol => [`${symbol}_based`, signalsByBaseSymbol[symbol].length])
+      ),
       totalActivePositions: positionSummary.totalPositions,
       totalPortfolioValue: positionSummary.totalValue,
       positionsWithExitLevels: exitMonitoringStatus.positionsWithStoredLevels || 0
@@ -437,10 +382,9 @@ export default async function handler(req, res) {
         tradesSkipped: tradingResults.filter(t => t.status === 'skipped').length,
         tradesFailed: tradingResults.filter(t => t.status === 'failed').length,
         trades: tradingResults,
-        signalBreakdown: {
-          SPY_signals: signalsByBaseSymbol.SPY.length,
-          QQQ_signals: signalsByBaseSymbol.QQQ.length
-        }
+        signalBreakdown: Object.fromEntries(
+          getAllBaseSymbols().map(symbol => [`${symbol}_signals`, signalsByBaseSymbol[symbol].length])
+        )
       },
       
       // Enhanced position and monitoring status
@@ -452,6 +396,13 @@ export default async function handler(req, res) {
         enabled: sheetsLogger.enabled,
         synchronizationResult: syncResult,
         storageStats: await positionManager.positionStorage.getStorageStats()
+      },
+      
+      // Configuration info
+      configuration: {
+        symbolTriplets: SYMBOL_TRIPLETS,
+        strategiesEnabled: strategies.filter(s => s.isEnabled()).length,
+        totalStrategies: strategies.length
       },
       
       performanceMetrics: performanceMetrics,
@@ -471,19 +422,22 @@ export default async function handler(req, res) {
       timestamp: new Date().toISOString()
     };
 
-    logger.info('Enhanced trading system execution completed with persistent storage', {
+    logger.info('Enhanced trading system execution completed with dynamic symbol configuration', {
       exitOrdersExecuted: response.exitMonitoring.exitOrdersExecuted,
       newTradesExecuted: response.newTrades.tradesExecuted,
       newTradesSkipped: response.newTrades.tradesSkipped,
       newTradesFailed: response.newTrades.tradesFailed,
-      SPY_signals: response.newTrades.signalBreakdown.SPY_signals,
-      QQQ_signals: response.newTrades.signalBreakdown.QQQ_signals,
+      ...Object.fromEntries(
+        getAllBaseSymbols().map(symbol => [`${symbol}_signals`, response.newTrades.signalBreakdown[`${symbol}_signals`]])
+      ),
       totalPositionsMonitored: response.exitMonitoring.positionsMonitored,
       persistentStorageEnabled: response.persistentStorage.enabled,
-      storageSyncResult: response.persistentStorage.synchronizationResult
+      storageSyncResult: response.persistentStorage.synchronizationResult,
+      configuredSymbols: getAllBaseSymbols().length
     });
 
     return res.json(response);
+
   } catch (error) {
     logger.error('Enhanced trading system error', {
       error: error.message,
@@ -496,6 +450,57 @@ export default async function handler(req, res) {
       timestamp: new Date().toISOString()
     });
   }
+}
+
+/**
+ * Generate strategies dynamically from symbol configuration
+ * @returns {Array} Array of strategy instances
+ */
+function generateStrategiesFromConfig() {
+  const strategies = [];
+
+  // Generate strategies for each symbol triplet
+  for (const triplet of SYMBOL_TRIPLETS) {
+    const baseSymbol = triplet.baseSymbol;
+    const symbolPrefix = baseSymbol.toLowerCase();
+
+    // Momentum Strategy
+    strategies.push(new MomentumStrategy({
+      enabled: process.env[`${baseSymbol}_MOMENTUM_ENABLED`] === 'true',
+      name: `${baseSymbol}_Momentum`,
+      baseSymbol: baseSymbol,
+      symbols: [triplet.bullSymbol, triplet.bearSymbol],
+      lookbackPeriod: parseInt(process.env[`${baseSymbol}_MOMENTUM_LOOKBACK`]) || 50,
+      shortMA: parseInt(process.env[`${baseSymbol}_MOMENTUM_SHORT_MA`]) || 20,
+      longMA: parseInt(process.env[`${baseSymbol}_MOMENTUM_LONG_MA`]) || 50,
+      positionSize: parseFloat(process.env[`${baseSymbol}_MOMENTUM_POSITION_SIZE`]) || 0.025
+    }));
+
+    // Mean Reversion Strategy
+    strategies.push(new MeanReversionStrategy({
+      enabled: process.env[`${baseSymbol}_MEAN_REVERSION_ENABLED`] === 'true',
+      name: `${baseSymbol}_MeanReversion`,
+      baseSymbol: baseSymbol,
+      symbols: [triplet.bullSymbol, triplet.bearSymbol],
+      rsiPeriod: parseInt(process.env[`${baseSymbol}_RSI_PERIOD`]) || 14,
+      oversoldThreshold: parseInt(process.env[`${baseSymbol}_RSI_OVERSOLD`]) || 30,
+      overboughtThreshold: parseInt(process.env[`${baseSymbol}_RSI_OVERBOUGHT`]) || 70,
+      positionSize: parseFloat(process.env[`${baseSymbol}_MEAN_REVERSION_POSITION_SIZE`]) || 0.02
+    }));
+
+    // Regime Detection Strategy
+    strategies.push(new RegimeDetectionStrategy({
+      enabled: process.env[`${baseSymbol}_REGIME_DETECTION_ENABLED`] === 'true',
+      name: `${baseSymbol}_RegimeDetection`,
+      baseSymbol: baseSymbol,
+      bullSymbol: triplet.bullSymbol,
+      bearSymbol: triplet.bearSymbol,
+      spyLookback: parseInt(process.env[`${baseSymbol}_REGIME_LOOKBACK`]) || 200,
+      positionSize: parseFloat(process.env[`${baseSymbol}_REGIME_POSITION_SIZE`]) || 0.03
+    }));
+  }
+
+  return strategies;
 }
 
 /**
