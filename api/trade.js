@@ -203,7 +203,7 @@ export default async function handler(req, res) {
  };
  tradingResults.push(duplicateTrade);
  
- logger.info('RACE CONDITION FIX: Trade blocked by Google Sheets duplicate detection', duplicateTrade);
+ logger.info('RACE CONDITION FIX: Trade blocked by Google Sheets duplicate detection - not logging to Google Sheets', duplicateTrade);
  continue; // Skip this signal and move to next
  }
 
@@ -224,7 +224,7 @@ export default async function handler(req, res) {
  strategy: strategy.getName()
  });
 
- // Log skipped trade
+ // Track skipped trade in results but don't log to sheets
  const skippedTrade = {
  symbol: adjustedSignal.symbol,
  side: adjustedSignal.side,
@@ -236,6 +236,10 @@ export default async function handler(req, res) {
  baseSymbol: baseSymbol
  };
  tradingResults.push(skippedTrade);
+ logger.info('Trade skipped - not logging to Google Sheets', {
+ symbol: adjustedSignal.symbol,
+ reasons: validation.skipReasons
+ });
  continue; // Skip this signal and move to next
  }
 
